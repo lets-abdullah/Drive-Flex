@@ -8,20 +8,19 @@ router = "path"
 
 [[services]]
 name = "web"
-paths = [ "/" ]
+paths = [ "/", "/_next", "/_next/hmr" ]
 localPort = 21121
 
 [services.development]
 run = "pnpm --filter @workspace/driveflex-web run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/driveflex-web", "run", "build" ]
-serve = "static"
-publicDir = "artifacts/driveflex-web/dist/public"
 
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
+[services.production.build]
+args = [ "pnpm", "--filter", "@workspace/driveflex-web", "run", "build" ]
+
+[services.production.run]
+args = [ "pnpm", "--filter", "@workspace/driveflex-web", "run", "serve" ]
 
 [services.env]
 PORT = "21121"

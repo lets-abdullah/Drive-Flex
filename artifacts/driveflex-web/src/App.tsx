@@ -1,10 +1,15 @@
+'use client';
+
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { ArrowRight, BadgeCheck, CalendarDays, CarFront, Check, CheckCircle2, ChevronLeft, CircleAlert, Clock3, Compass, Fuel, Heart, ImagePlus, LayoutDashboard, MapPin, Menu, MessageSquare, Navigation, Pencil, Phone, Plus, ShieldCheck, Sparkles, Star, UserCheck, UserRound, Users, X, Zap } from 'lucide-react';
-import { Link, Route, Switch, useLocation, useParams } from 'wouter';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import logo from '@assets/WhatsApp_Image_2026-09-22_at_2.29.38_PM-removebg-preview_1790075154850.png';
 import { availabilityLabel, vehicles, findVehicle, calculateRentalPrice, datesOverlap, type Vehicle } from '@/data/vehicles';
 import { findOwner, findOwnerById, owners, type Owner, type OwnerType } from '@/data/owners';
-import NotFound from '@/pages/not-found';
+import NotFound from '@/components/not-found';
+
+const logoSrc = typeof logo === 'string' ? logo : logo.src;
 
 const sessionKey = 'driveflex-demo-session';
 const favoriteKey = 'driveflex-favorites';
@@ -57,6 +62,18 @@ function formatMoney(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 }
 
+function useRouteSlug(prefix: string) {
+  const pathname = usePathname() || '';
+  const value = pathname.startsWith(`${prefix}/`) ? pathname.slice(prefix.length + 1).split('/')[0] : '';
+  return value ? decodeURIComponent(value) : '';
+}
+
+function useLocation(): readonly [string, (path: string) => void] {
+  const pathname = usePathname() || '/';
+  const router = useRouter();
+  return [pathname, (path: string) => router.push(path)] as const;
+}
+
 const ownerProfileKey = 'driveflex-demo-owner-profile';
 const publishedVehiclesKey = 'driveflex-demo-published-vehicles';
 const demoBookingsKey = 'driveflex-demo-bookings';
@@ -82,7 +99,7 @@ function allCars() {
 
 function Layout({ children }: { children: ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [location] = useLocation();
+  const location = usePathname();
   const session = useSession();
   const navLinks = [['/', 'Fleet'], ['/about', 'About'], ['/contact', 'Contact']] as const;
   return (
@@ -90,7 +107,7 @@ function Layout({ children }: { children: ReactNode }) {
       <header className="nav">
         <div className="container nav-inner">
           <Link href="/" className="brand" data-testid="link-brand">
-            <img src={logo} alt="Drive Flex" />
+            <img src={logoSrc} alt="Drive Flex" />
             <span className="brand-wordmark">Drive <span>Flex</span></span>
           </Link>
           <nav className="nav-links" aria-label="Primary navigation">
@@ -118,7 +135,7 @@ function Layout({ children }: { children: ReactNode }) {
 function Footer() {
   return <footer className="footer">
     <div className="container footer-grid">
-      <div><Link href="/" className="brand" data-testid="link-footer-brand"><img src={logo} alt="Drive Flex" /><span className="brand-wordmark">Drive <span>Flex</span></span></Link><p>Premium cars. Powerful choices.<br />Simple booking.</p></div>
+      <div><Link href="/" className="brand" data-testid="link-footer-brand"><img src={logoSrc} alt="Drive Flex" /><span className="brand-wordmark">Drive <span>Flex</span></span></Link><p>Premium cars. Powerful choices.<br />Simple booking.</p></div>
       <div><h3>Explore</h3><Link href="/">Browse fleet</Link><Link href="/about">Our story</Link><Link href="/owner/onboard">List your car</Link></div>
       <div><h3>Account</h3><Link href="/sign-in">Sign in</Link><Link href="/register">Create demo profile</Link><Link href="/profile">Profile</Link></div>
       <div><h3>Talk to us</h3><p>Monday — Friday<br />8:00 AM — 6:00 PM EST</p><Link href="/contact">Contact concierge <ArrowRight size={13} style={{ display: 'inline', verticalAlign: 'middle' }} /></Link></div>
@@ -263,7 +280,7 @@ function Contact() {
 function AuthPage({ mode }: { mode: 'signin' | 'register' }) {
   const isRegister = mode === 'register';
   usePageMeta(isRegister ? 'Create your Drive Flex profile' : 'Sign in to Drive Flex', isRegister ? 'Create a frontend demo profile to save cars and preview bookings.' : 'Sign in to your Drive Flex frontend demo profile.');
-  const [, setLocation] = useLocation();
+  const router = useRouter();
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -274,7 +291,7 @@ function AuthPage({ mode }: { mode: 'signin' | 'register' }) {
     if (form.password.length < 8) return setError('Password must be at least 8 characters.');
     if (isRegister && form.password !== form.confirm) return setError('Passwords do not match.');
     setError(''); setLoading(true);
-    window.setTimeout(() => { setSession({ name: isRegister ? form.name : (form.email.split('@')[0] || 'Drive Flex member'), email: form.email }); setLocation('/profile'); }, 650);
+    window.setTimeout(() => { setSession({ name: isRegister ? form.name : (form.email.split('@')[0] || 'Drive Flex member'), email: form.email }); router.push('/profile'); }, 650);
   };
   return <Layout><main className="auth-wrap"><form className="auth-card" onSubmit={submit} noValidate><div className="eyebrow">{isRegister ? 'Join the movement' : 'Welcome back'}</div><h1>{isRegister ? 'Make the next drive yours.' : 'Pick up where you left off.'}</h1><p>{isRegister ? 'Save favorites, remember your preferences, and preview a more personal rental experience.' : 'Sign in to see your saved cars and demo booking history.'}</p><div className="demo-note"><CircleAlert size={16} /> This is a frontend-only demo. No account or password is stored on a server.</div>{isRegister && <div className="form-field"><label htmlFor="auth-name">Full name</label><input id="auth-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Alex Morgan" data-testid="input-auth-name" /></div>}<div className="form-field"><label htmlFor="auth-email">Email</label><input id="auth-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="you@example.com" data-testid="input-auth-email" /></div><div className="form-field"><label htmlFor="auth-password">Password</label><input id="auth-password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="8 characters minimum" data-testid="input-auth-password" /></div>{isRegister && <div className="form-field"><label htmlFor="auth-confirm">Confirm password</label><input id="auth-confirm" type="password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} placeholder="Repeat your password" data-testid="input-auth-confirm" /></div>}{error && <div className="error-box" role="alert" data-testid="error-auth">{error}</div>}<button className="btn btn-primary" style={{ width: '100%', marginTop: 6 }} type="submit" disabled={loading} data-testid={`button-${mode}`}>{loading ? 'Opening your demo profile…' : isRegister ? 'Create demo profile' : 'Sign in to demo'} <ArrowRight size={15} /></button><div className="auth-switch">{isRegister ? <>Already have a demo profile? <Link href="/sign-in" data-testid="link-auth-signin">Sign in</Link></> : <>New to Drive Flex? <Link href="/register" data-testid="link-auth-register">Create a demo profile</Link></>}</div></form></main></Layout>;
 }
@@ -294,7 +311,7 @@ function Profile() {
 
 function BookingWidget({ vehicle }: { vehicle: Vehicle }) {
   const session = useSession();
-  const [, setLocation] = useLocation();
+  const router = useRouter();
   const [pickup, setPickup] = useState('');
   const [returnDate, setReturnDate] = useState('');
   const [error, setError] = useState('');
@@ -310,11 +327,11 @@ function BookingWidget({ vehicle }: { vehicle: Vehicle }) {
   };
   const book = () => { const message = validate(); if (message) return setError(message); setError(''); if (!session) setShowPrompt(true); else { const bookings = getDemoBookings(); bookings.push({ vehicleId: vehicle.id, customer: session.name, pickup, returnDate, status: 'Confirmed' }); localStorage.setItem(demoBookingsKey, JSON.stringify(bookings)); setConfirmed(true); } };
   const selectedStatus = pickup && returnDate ? (datesOverlap(vehicle, pickup, returnDate) ? 'Unavailable for selected dates' : 'Available') : 'Choose dates to check availability';
-  return <aside className="booking-card"><div className="eyebrow">Reserve your drive</div><h2>Ready when you are.</h2><div className="booking-price"><strong>{formatMoney(vehicle.pricePerDay)}</strong><span>per day · no payment in demo</span></div><div className="form-field"><label htmlFor="booking-pickup">Pickup date</label><input id="booking-pickup" type="date" min={todayString()} value={pickup} onChange={(e) => { setPickup(e.target.value); setConfirmed(false); setShowPrompt(false); }} data-testid="input-booking-pickup" /></div><div className="form-field"><label htmlFor="booking-return">Return date</label><input id="booking-return" type="date" min={pickup || todayString()} value={returnDate} onChange={(e) => { setReturnDate(e.target.value); setConfirmed(false); setShowPrompt(false); }} data-testid="input-booking-return" /></div><div className={`booking-availability ${selectedStatus === 'Available' ? 'is-available' : 'is-unavailable'}`}><CalendarDays size={15} /><span>{selectedStatus}</span></div>{error && <div className="error-box" role="alert" data-testid="error-booking">{error}</div>}{quote.days > 0 && !error && <div className="booking-summary"><div className="summary-row"><span>Rental duration</span><strong>{quote.days} {quote.days === 1 ? 'day' : 'days'}</strong></div><div className="summary-row"><span>{formatMoney(vehicle.pricePerDay)} × {quote.days}</span><strong>{formatMoney(quote.total)}</strong></div><div className="summary-row total"><span>Estimated total</span><strong>{formatMoney(quote.total)}</strong></div></div>}{vehicle.rentalPeriods.length > 0 && <div className="unavailable">Confirmed rentals are blocked automatically when dates overlap.</div>}{confirmed ? <div className="booking-confirm" role="status" data-testid="status-booking-confirmed"><Check size={17} style={{ verticalAlign: 'middle', marginRight: 7 }} /><strong>Demo booking confirmed.</strong><br />This frontend preview does not create a real reservation or process a payment.</div> : <button className="btn btn-primary" style={{ width: '100%', marginTop: 20 }} onClick={book} disabled={selectedStatus === 'Unavailable for selected dates'} data-testid="button-book-now">Book this car <ArrowRight size={15} /></button>}{showPrompt && <div className="auth-prompt" data-testid="prompt-booking-auth">You’re almost there. Sign in or create a demo profile to continue this booking preview.<div className="auth-prompt-actions"><button className="btn btn-gold btn-sm" onClick={() => setLocation('/sign-in')} data-testid="button-booking-signin">Sign in</button><button className="btn btn-outline btn-sm" onClick={() => setLocation('/register')} data-testid="button-booking-register">Register</button></div></div>}</aside>;
+  return <aside className="booking-card"><div className="eyebrow">Reserve your drive</div><h2>Ready when you are.</h2><div className="booking-price"><strong>{formatMoney(vehicle.pricePerDay)}</strong><span>per day · no payment in demo</span></div><div className="form-field"><label htmlFor="booking-pickup">Pickup date</label><input id="booking-pickup" type="date" min={todayString()} value={pickup} onChange={(e) => { setPickup(e.target.value); setConfirmed(false); setShowPrompt(false); }} data-testid="input-booking-pickup" /></div><div className="form-field"><label htmlFor="booking-return">Return date</label><input id="booking-return" type="date" min={pickup || todayString()} value={returnDate} onChange={(e) => { setReturnDate(e.target.value); setConfirmed(false); setShowPrompt(false); }} data-testid="input-booking-return" /></div><div className={`booking-availability ${selectedStatus === 'Available' ? 'is-available' : 'is-unavailable'}`}><CalendarDays size={15} /><span>{selectedStatus}</span></div>{error && <div className="error-box" role="alert" data-testid="error-booking">{error}</div>}{quote.days > 0 && !error && <div className="booking-summary"><div className="summary-row"><span>Rental duration</span><strong>{quote.days} {quote.days === 1 ? 'day' : 'days'}</strong></div><div className="summary-row"><span>{formatMoney(vehicle.pricePerDay)} × {quote.days}</span><strong>{formatMoney(quote.total)}</strong></div><div className="summary-row total"><span>Estimated total</span><strong>{formatMoney(quote.total)}</strong></div></div>}{vehicle.rentalPeriods.length > 0 && <div className="unavailable">Confirmed rentals are blocked automatically when dates overlap.</div>}{confirmed ? <div className="booking-confirm" role="status" data-testid="status-booking-confirmed"><Check size={17} style={{ verticalAlign: 'middle', marginRight: 7 }} /><strong>Demo booking confirmed.</strong><br />This frontend preview does not create a real reservation or process a payment.</div> : <button className="btn btn-primary" style={{ width: '100%', marginTop: 20 }} onClick={book} disabled={selectedStatus === 'Unavailable for selected dates'} data-testid="button-book-now">Book this car <ArrowRight size={15} /></button>}{showPrompt && <div className="auth-prompt" data-testid="prompt-booking-auth">You’re almost there. Sign in or create a demo profile to continue this booking preview.<div className="auth-prompt-actions"><button className="btn btn-gold btn-sm" onClick={() => router.push('/sign-in')} data-testid="button-booking-signin">Sign in</button><button className="btn btn-outline btn-sm" onClick={() => router.push('/register')} data-testid="button-booking-register">Register</button></div></div>}</aside>;
 }
 
 function CarDetail() {
-  const { slug = '' } = useParams<{ slug: string }>();
+  const slug = useRouteSlug('/cars');
   const vehicle = findVehicle(slug) || getPublishedVehicles().find((item) => item.slug === slug);
   usePageMeta(vehicle ? `${vehicle.brand} ${vehicle.model}` : 'Vehicle not found', vehicle?.description || 'Explore the Drive Flex vehicle collection.');
   const [activeImage, setActiveImage] = useState(0);
@@ -324,7 +341,7 @@ function CarDetail() {
 }
 
 function OwnerProfile() {
-  const { slug = '' } = useParams<{ slug: string }>();
+  const slug = useRouteSlug('/owners');
   const owner = findOwner(slug) || (getDemoOwner()?.slug === slug ? getDemoOwner() : null);
   usePageMeta(owner ? owner.businessName : 'Owner profile', 'Meet the verified owner and browse their Drive Flex cars.');
   if (!owner) return <Layout><main className="not-found"><div><div className="eyebrow">Owner profile unavailable</div><h1>That profile took a detour.</h1><Link className="btn btn-primary" href="/" data-testid="link-owner-not-found">Browse fleet</Link></div></main></Layout>;
@@ -334,7 +351,7 @@ function OwnerProfile() {
 
 function Onboarding() {
   usePageMeta('Become a verified car owner', 'Create a professional Drive Flex owner profile in this frontend demo.');
-  const [, setLocation] = useLocation();
+  const router = useRouter();
   const existing = getDemoOwner();
   const [step, setStep] = useState(existing ? 2 : 1);
   const [submitted, setSubmitted] = useState(Boolean(existing));
@@ -391,7 +408,20 @@ function AddCar() {
 }
 
 function Router() {
-  return <Switch><Route path="/" component={Home} /><Route path="/about" component={About} /><Route path="/contact" component={Contact} /><Route path="/register"><AuthPage mode="register" /></Route><Route path="/sign-in"><AuthPage mode="signin" /></Route><Route path="/profile" component={Profile} /><Route path="/owner/onboard" component={Onboarding} /><Route path="/owner/dashboard" component={OwnerDashboard} /><Route path="/owner/cars/new" component={AddCar} /><Route path="/owners/:slug" component={OwnerProfile} /><Route path="/cars/:slug" component={CarDetail} /><Route component={NotFound} /></Switch>;
+  const pathname = (usePathname() || '/').replace(/\/+$/, '') || '/';
+
+  if (pathname === '/') return <Home />;
+  if (pathname === '/about') return <About />;
+  if (pathname === '/contact') return <Contact />;
+  if (pathname === '/register') return <AuthPage mode="register" />;
+  if (pathname === '/sign-in') return <AuthPage mode="signin" />;
+  if (pathname === '/profile') return <Profile />;
+  if (pathname === '/owner/onboard') return <Onboarding />;
+  if (pathname === '/owner/dashboard') return <OwnerDashboard />;
+  if (pathname === '/owner/cars/new') return <AddCar />;
+  if (pathname.startsWith('/owners/')) return <OwnerProfile />;
+  if (pathname.startsWith('/cars/')) return <CarDetail />;
+  return <NotFound />;
 }
 
 export default function App() {

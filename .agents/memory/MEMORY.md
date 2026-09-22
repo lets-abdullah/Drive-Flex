@@ -1,0 +1,1 @@
+- [Next.js compiler choice](nextjs-compiler.md) — Use the webpack compiler for Drive Flex because the existing Tailwind animation stylesheet export fails under Next Turbopack.
