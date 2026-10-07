@@ -1,0 +1,15 @@
+import type { Metadata } from 'next';
+import '../styles/globals.css';
+
+export const metadata: Metadata = {
+  title: 'Drive Flex',
+  description: 'A premium car-rental marketplace for discovering verified vehicles, exploring trusted owners, and previewing date-based bookings.',
+};
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body suppressHydrationWarning>{children}</body>
+    </html>
+  );
+}
