@@ -167,6 +167,14 @@ export function AuthPage({ mode, defaultRole }: AuthPageProps) {
                 ? 'Create a customer account to reserve cars instantly, save your favorite vehicles, and track bookings.'
                 : 'Sign in to browse the curated fleet, view your reservation status, and contact hosts.'}
             </p>
+            <div style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>
+              <Link 
+                href={role === 'host' ? '/host' : '/renter'} 
+                style={{ color: 'var(--gold, #c9a227)', textDecoration: 'underline', fontWeight: 600 }}
+              >
+                ✦ Open Dedicated {role === 'host' ? 'Host & Lister' : 'Renter & Driver'} Portal →
+              </Link>
+            </div>
           </div>
 
           {/* Role Mismatch Alert */}

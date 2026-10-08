@@ -42,8 +42,8 @@ export default function HomePage() {
               <a className="btn btn-gold" href="#fleet-results" data-testid="link-hero-find-cars">
                 EXPLORE THE FLEET <ArrowRight size={15} />
               </a>
-              <Link className="btn btn-outline" href="/owner/onboard" data-testid="link-hero-list-car">
-                LIST YOUR CAR
+              <Link className="btn btn-outline" href="/host" data-testid="link-hero-list-car">
+                JOIN AS HOST
               </Link>
             </div>
           </div>

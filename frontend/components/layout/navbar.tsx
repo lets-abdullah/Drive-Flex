@@ -105,13 +105,13 @@ export function Navbar() {
             </>
           ) : (
             <>
-              <Link className="btn btn-ghost btn-sm" href="/sign-in" data-testid="link-nav-signin">
-                Sign in
+              <Link className="btn btn-ghost btn-sm" href="/renter" data-testid="link-nav-join-renter">
+                Join as Renter
               </Link>
               <Link
                 className="btn btn-gold btn-sm"
-                href="/register?role=host"
-                data-testid="link-nav-register-host"
+                href="/host"
+                data-testid="link-nav-join-host"
               >
                 Join as Host
               </Link>
@@ -183,26 +183,34 @@ export function Navbar() {
         ) : (
           <>
             <Link
-              href="/sign-in?role=renter"
+              href="/renter"
+              onClick={() => setMenuOpen(false)}
+              data-testid="link-mobile-join-renter"
+              style={{ color: '#ffffff', fontWeight: 600 }}
+            >
+              ✦ Join as Renter (Book Luxury Cars)
+            </Link>
+            <Link
+              href="/host"
+              onClick={() => setMenuOpen(false)}
+              data-testid="link-mobile-join-host"
+              style={{ color: 'var(--gold, #c9a227)', fontWeight: 600 }}
+            >
+              ✦ Join as Host (List Cars & Earn)
+            </Link>
+            <Link
+              href="/renter?tab=signin"
               onClick={() => setMenuOpen(false)}
               data-testid="link-mobile-signin-renter"
             >
               Sign in as Renter
             </Link>
             <Link
-              href="/sign-in?role=host"
+              href="/host?tab=signin"
               onClick={() => setMenuOpen(false)}
               data-testid="link-mobile-signin-host"
             >
               Sign in as Host / Lister
-            </Link>
-            <Link
-              href="/register?role=host"
-              onClick={() => setMenuOpen(false)}
-              data-testid="link-mobile-register-host"
-              style={{ color: 'var(--gold, #c9a227)', fontWeight: 600 }}
-            >
-              Join Drive Flex (List Your Car)
             </Link>
           </>
         )}
