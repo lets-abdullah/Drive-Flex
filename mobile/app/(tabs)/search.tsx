@@ -14,6 +14,7 @@ import {
 import { EmptyState, Notice, Page, Pill } from '@/components/Marketplace';
 import { categories, type Vehicle } from '@/data/catalog';
 import { useDriveFlex } from '@/context/AppContext';
+import { useLocationFilter } from '@/context/LocationContext';
 import { useColors } from '@/hooks/useColors';
 
 const cities = ['All cities', 'Lahore', 'Islamabad', 'Karachi'];
@@ -22,6 +23,15 @@ export default function SearchScreen() {
   const colors = useColors();
   const params = useLocalSearchParams<{ category?: string }>();
   const { vehicles, favorites, toggleFavorite, apiError, refresh } = useDriveFlex();
+  const {
+    currentCity,
+    radiusKm,
+    isFilterActive,
+    openModal,
+    clearFilter,
+    applyLocation,
+    getDistanceToVehicle,
+  } = useLocationFilter();
 
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState(params.category ?? 'All');
@@ -37,20 +47,43 @@ export default function SearchScreen() {
   }, [params.category]);
 
   const filtered = useMemo(() => {
-    return vehicles.filter((vehicle) => {
+    let list = vehicles.filter((vehicle) => {
       const searchText = `${vehicle.brand} ${vehicle.model} ${vehicle.category} ${vehicle.location}`.toLowerCase();
       const matchQuery = searchText.includes(query.trim().toLowerCase());
       const matchCategory = category === 'All' || vehicle.category === category;
       const matchCity = city === 'All cities' || vehicle.location.toLowerCase().startsWith(city.toLowerCase());
       const matchPrice = maxPrice === null || vehicle.pricePerDay <= maxPrice;
+
+      // Facebook Marketplace Radius filter
+      if (isFilterActive) {
+        const dist = getDistanceToVehicle(vehicle);
+        if (dist === null || dist > radiusKm) {
+          return false;
+        }
+      }
+
       return matchQuery && matchCategory && matchCity && matchPrice;
     });
-  }, [vehicles, query, category, city, maxPrice]);
+
+    if (isFilterActive) {
+      list.sort((a, b) => {
+        const distA = getDistanceToVehicle(a) ?? 9999;
+        const distB = getDistanceToVehicle(b) ?? 9999;
+        return distA - distB;
+      });
+    }
+
+    return list;
+  }, [vehicles, query, category, city, maxPrice, isFilterActive, radiusKm, getDistanceToVehicle]);
 
   const screenWidth = Dimensions.get('window').width;
   const cardWidth = Math.max(150, (screenWidth - 52) / 2);
 
-  const activeFilterCount = (category !== 'All' ? 1 : 0) + (city !== 'All cities' ? 1 : 0) + (maxPrice !== null ? 1 : 0);
+  const activeFilterCount =
+    (category !== 'All' ? 1 : 0) +
+    (city !== 'All cities' ? 1 : 0) +
+    (maxPrice !== null ? 1 : 0) +
+    (isFilterActive ? 1 : 0);
 
   return (
     <Page tabbed>
@@ -141,6 +174,52 @@ export default function SearchScreen() {
               />
             ))}
           </ScrollView>
+
+          {/* Location Radius (Facebook Marketplace Style) */}
+          <Text style={[styles.filterLabel, { color: colors.mutedForeground, marginTop: 14 }]}>
+            RADIUS FILTER (FB MARKETPLACE)
+          </Text>
+          <Pressable
+            onPress={openModal}
+            style={[
+              styles.locationDrawerBtn,
+              {
+                backgroundColor: isFilterActive ? 'rgba(229,169,60,0.14)' : colors.secondary,
+                borderColor: isFilterActive ? colors.accent : colors.border,
+              },
+            ]}
+          >
+            <Feather name="map-pin" size={14} color={colors.accent} />
+            <Text style={[styles.locationDrawerBtnText, { color: colors.foreground }]}>
+              {currentCity.name} · {radiusKm} km radius
+            </Text>
+            {isFilterActive && (
+              <Pressable onPress={clearFilter} hitSlop={6} style={{ marginLeft: 'auto' }}>
+                <Text style={{ fontSize: 12, color: '#ff6b81', fontWeight: '600' }}>Reset</Text>
+              </Pressable>
+            )}
+          </Pressable>
+        </View>
+      )}
+
+      {/* ─── ACTIVE LOCATION BANNER ─── */}
+      {isFilterActive && (
+        <View style={[styles.locationBanner, { backgroundColor: colors.card, borderColor: 'rgba(229,169,60,0.3)' }]}>
+          <View style={styles.locationBannerLeft}>
+            <Feather name="navigation" size={14} color={colors.accent} />
+            <Text style={[styles.locationBannerText, { color: colors.foreground }]}>
+              Within <Text style={{ color: colors.accent, fontWeight: '700' }}>{radiusKm} km</Text> of{' '}
+              <Text style={{ fontWeight: '700' }}>{currentCity.name}</Text>
+            </Text>
+          </View>
+          <View style={styles.locationBannerActions}>
+            <Pressable onPress={openModal} hitSlop={6} style={styles.locationBannerBtn}>
+              <Text style={styles.locationBannerBtnText}>Change</Text>
+            </Pressable>
+            <Pressable onPress={clearFilter} hitSlop={6} style={styles.locationBannerResetBtn}>
+              <Text style={styles.locationBannerResetBtnText}>All</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -186,6 +265,7 @@ export default function SearchScreen() {
           {filtered.length} {filtered.length === 1 ? 'ride available' : 'rides available'}
           {category !== 'All' ? ` in ${category}` : ''}
           {city !== 'All cities' ? ` (${city})` : ''}
+          {isFilterActive ? ` · ${radiusKm}km of ${currentCity.name}` : ''}
         </Text>
       </View>
 
@@ -194,14 +274,19 @@ export default function SearchScreen() {
       {/* ─── VEHICLE RESULTS (GRID OR LIST) ─── */}
       {filtered.length === 0 ? (
         <EmptyState
-          title="No cars match those filters"
-          detail="Try another city, expand your budget, or choose a different category."
-          action="Clear all filters"
+          title={isFilterActive ? `No cars within ${radiusKm} km of ${currentCity.name}` : "No cars match those filters"}
+          detail={isFilterActive ? "Expand your search radius or reset to view all cars." : "Try another city, expand your budget, or choose a different category."}
+          action={isFilterActive ? "Expand to 500 km" : "Clear all filters"}
           onAction={() => {
-            setQuery('');
-            setCategory('All');
-            setCity('All cities');
-            setMaxPrice(null);
+            if (isFilterActive) {
+              applyLocation(currentCity, 500);
+            } else {
+              setQuery('');
+              setCategory('All');
+              setCity('All cities');
+              setMaxPrice(null);
+              clearFilter();
+            }
           }}
         />
       ) : viewMode === 'grid' ? (
@@ -209,6 +294,7 @@ export default function SearchScreen() {
         <View style={styles.cardsGrid}>
           {filtered.map((vehicle) => {
             const isFav = favorites.includes(vehicle.id);
+            const dist = isFilterActive ? getDistanceToVehicle(vehicle) : null;
             return (
               <Pressable
                 key={vehicle.id}
@@ -224,6 +310,12 @@ export default function SearchScreen() {
               >
                 <View style={[styles.gridImageWrap, { backgroundColor: colors.secondary }]}>
                   <Image source={{ uri: vehicle.image }} contentFit="cover" style={styles.gridImage} transition={150} />
+                  {dist !== null && (
+                    <View style={styles.gridDistanceBadge}>
+                      <Feather name="map-pin" size={10} color="#E5A93C" />
+                      <Text style={styles.gridDistanceText}>{dist} km</Text>
+                    </View>
+                  )}
                   <Pressable
                     onPress={(e) => {
                       e.stopPropagation();
@@ -252,6 +344,7 @@ export default function SearchScreen() {
         <View style={{ gap: 12, marginBottom: 24 }}>
           {filtered.map((vehicle) => {
             const isFav = favorites.includes(vehicle.id);
+            const dist = isFilterActive ? getDistanceToVehicle(vehicle) : null;
             return (
               <Pressable
                 key={vehicle.id}
@@ -266,7 +359,8 @@ export default function SearchScreen() {
                     {vehicle.brand} {vehicle.model}
                   </Text>
                   <Text numberOfLines={1} style={[styles.listMeta, { color: colors.mutedForeground }]}>
-                    {vehicle.category} · {vehicle.transmission} · {vehicle.location.split(',')[0]}
+                    {vehicle.category} · {vehicle.transmission}
+                    {dist !== null ? ` · 📍 ${dist} km away` : ` · ${vehicle.location.split(',')[0]}`}
                   </Text>
                   <View style={styles.listPriceRow}>
                     <Text style={[styles.listPrice, { color: colors.foreground }]}>${vehicle.pricePerDay}</Text>
@@ -522,5 +616,84 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  locationDrawerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 6,
+    gap: 8,
+  },
+  locationDrawerBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  locationBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 10,
+  },
+  locationBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  locationBannerText: {
+    fontSize: 12,
+  },
+  locationBannerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  locationBannerBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#E5A93C',
+  },
+  locationBannerBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  locationBannerResetBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  locationBannerResetBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#b0b3b8',
+  },
+  gridDistanceBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    zIndex: 2,
+  },
+  gridDistanceText: {
+    color: '#E5A93C',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

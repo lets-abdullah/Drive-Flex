@@ -13,18 +13,35 @@ import {
 import { Notice, Page } from '@/components/Marketplace';
 import { categories, type Vehicle } from '@/data/catalog';
 import { useDriveFlex } from '@/context/AppContext';
+import { useLocationFilter } from '@/context/LocationContext';
 import { useColors } from '@/hooks/useColors';
 
 export default function HomeScreen() {
   const colors = useColors();
   const { vehicles, apiConfigured, apiError, refresh, theme, toggleTheme, favorites, toggleFavorite } = useDriveFlex();
+  const {
+    currentCity,
+    radiusKm,
+    isFilterActive,
+    openModal,
+    clearFilter,
+    applyLocation,
+    getDistanceToVehicle,
+    filterVehicles,
+  } = useLocationFilter();
   const [selectedCategory, setSelectedCategory] = useState('All');
 
-  // Filter vehicles by category on the home screen
+  // Filter vehicles by category and location radius on the home screen
   const displayedVehicles = useMemo(() => {
-    if (selectedCategory === 'All') return vehicles;
-    return vehicles.filter((v) => v.category === selectedCategory);
-  }, [vehicles, selectedCategory]);
+    let list = vehicles;
+    if (selectedCategory !== 'All') {
+      list = list.filter((v) => v.category === selectedCategory);
+    }
+    if (isFilterActive) {
+      list = filterVehicles(list);
+    }
+    return list;
+  }, [vehicles, selectedCategory, isFilterActive, filterVehicles]);
 
   // Featured car for the hero card
   const heroVehicle = vehicles[0] ?? {
@@ -35,11 +52,30 @@ export default function HomeScreen() {
 
   return (
     <Page tabbed>
-      {/* ─── 1. TOP BAR (Grid icon on left, Theme Toggle & Profile on right) ─── */}
+      {/* ─── 1. TOP BAR (Grid icon, Location pill, Theme Toggle & Profile) ─── */}
       <View style={styles.topBar}>
         <View style={[styles.iconButton, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Feather name="grid" size={20} color={colors.foreground} />
         </View>
+
+        {/* Facebook-style location chip */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Change location and radius"
+          onPress={openModal}
+          style={[
+            styles.locationChip,
+            {
+              backgroundColor: isFilterActive ? 'rgba(229,169,60,0.15)' : colors.card,
+              borderColor: isFilterActive ? colors.accent : colors.border,
+            },
+          ]}
+        >
+          <Feather name="map-pin" size={12} color={colors.accent} />
+          <Text style={[styles.locationChipText, { color: isFilterActive ? colors.accent : colors.foreground }]}>
+            {currentCity.name} · {radiusKm} km
+          </Text>
+        </Pressable>
 
         <View style={styles.topBarActions}>
           <Pressable
@@ -100,6 +136,27 @@ export default function HomeScreen() {
           <Feather name="sliders" size={18} color="#ffffff" />
         </Pressable>
       </View>
+
+      {/* ─── ACTIVE LOCATION RADIUS BANNER ─── */}
+      {isFilterActive && (
+        <View style={[styles.locationBanner, { backgroundColor: colors.card, borderColor: 'rgba(229,169,60,0.3)' }]}>
+          <View style={styles.locationBannerLeft}>
+            <Feather name="navigation" size={14} color={colors.accent} />
+            <Text style={[styles.locationBannerText, { color: colors.foreground }]}>
+              Within <Text style={{ color: colors.accent, fontWeight: '700' }}>{radiusKm} km</Text> of{' '}
+              <Text style={{ fontWeight: '700' }}>{currentCity.name}</Text>
+            </Text>
+          </View>
+          <View style={styles.locationBannerActions}>
+            <Pressable onPress={openModal} hitSlop={6} style={styles.locationBannerBtn}>
+              <Text style={styles.locationBannerBtnText}>Change</Text>
+            </Pressable>
+            <Pressable onPress={clearFilter} hitSlop={6} style={styles.locationBannerResetBtn}>
+              <Text style={styles.locationBannerResetBtnText}>All</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* ─── 4. HERO PROMO BANNER CARD (Compact horizontal card matching reference) ─── */}
       <View style={[styles.promoCard, { backgroundColor: colors.darkCard, borderColor: colors.border }]}>
@@ -191,16 +248,47 @@ export default function HomeScreen() {
       </ScrollView>
 
       {/* ─── 6. TWO-COLUMN PRODUCT CARDS GRID (Matching Screen 1 bottom cards) ─── */}
-      <View style={styles.cardsGrid}>
-        {displayedVehicles.slice(0, 6).map((vehicle) => (
-          <GridCard
-            key={vehicle.id}
-            vehicle={vehicle}
-            isFavorite={favorites.includes(vehicle.id)}
-            onToggleFavorite={() => void toggleFavorite(vehicle.id)}
-          />
-        ))}
-      </View>
+      {displayedVehicles.length === 0 ? (
+        <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Feather name="map-pin" size={26} color={colors.accent} style={{ marginBottom: 8 }} />
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+            No listings within {radiusKm} km of {currentCity.name}
+          </Text>
+          <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>
+            Broaden your search radius to discover vehicles in nearby cities.
+          </Text>
+          <View style={styles.emptyActionsRow}>
+            {radiusKm < 250 && (
+              <Pressable
+                onPress={() => applyLocation(currentCity, 250)}
+                style={[styles.emptyBtn, { backgroundColor: colors.secondary }]}
+              >
+                <Text style={[styles.emptyBtnText, { color: colors.foreground }]}>Expand to 250 km</Text>
+              </Pressable>
+            )}
+            <Pressable
+              onPress={() => applyLocation(currentCity, 500)}
+              style={[styles.emptyBtn, { backgroundColor: colors.accent }]}
+            >
+              <Text style={[styles.emptyBtnText, { color: '#000000', fontWeight: '700' }]}>
+                Expand to 500 km
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.cardsGrid}>
+          {displayedVehicles.slice(0, 8).map((vehicle) => (
+            <GridCard
+              key={vehicle.id}
+              vehicle={vehicle}
+              isFavorite={favorites.includes(vehicle.id)}
+              onToggleFavorite={() => void toggleFavorite(vehicle.id)}
+              distance={isFilterActive ? getDistanceToVehicle(vehicle) : null}
+            />
+          ))}
+        </View>
+      )}
 
       {/* ─── 7. QUICK STATS ROW ─── */}
       <View style={[styles.statsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -248,10 +336,12 @@ function GridCard({
   vehicle,
   isFavorite,
   onToggleFavorite,
+  distance,
 }: {
   vehicle: Vehicle;
   isFavorite: boolean;
   onToggleFavorite: () => void;
+  distance?: number | null;
 }) {
   const colors = useColors();
   const screenWidth = Dimensions.get('window').width;
@@ -280,6 +370,13 @@ function GridCard({
           style={styles.gridImage}
           transition={160}
         />
+        {/* Distance Badge if location filter is active */}
+        {distance !== null && distance !== undefined && (
+          <View style={styles.gridDistanceBadge}>
+            <Feather name="map-pin" size={10} color="#E5A93C" />
+            <Text style={styles.gridDistanceText}>{distance} km</Text>
+          </View>
+        )}
         {/* Heart button */}
         <Pressable
           accessibilityRole="button"
@@ -322,6 +419,122 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 16,
+    gap: 8,
+  },
+  locationChip: {
+    flex: 1,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  locationChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  locationBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 10,
+  },
+  locationBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  locationBannerText: {
+    fontSize: 12,
+  },
+  locationBannerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  locationBannerBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#E5A93C',
+  },
+  locationBannerBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  locationBannerResetBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  locationBannerResetBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#b0b3b8',
+  },
+  emptyCard: {
+    padding: 24,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  emptySub: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  emptyActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  emptyBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  emptyBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  gridDistanceBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    zIndex: 2,
+  },
+  gridDistanceText: {
+    color: '#E5A93C',
+    fontSize: 10,
+    fontWeight: '700',
   },
   topBarActions: {
     flexDirection: 'row',

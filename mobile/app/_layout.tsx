@@ -16,6 +16,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { setBaseUrl } from '@workspace/api-client-react';
 import { AppProvider, useDriveFlex } from '@/context/AppContext';
+import { LocationProvider } from '@/context/LocationContext';
+import { ChangeLocationModal } from '@/components/ChangeLocationModal';
 import * as Updates from 'expo-updates';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -102,15 +104,18 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <AppProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <RootLayoutNav />
-              {!appReady && (
-                <CarLoadingScreen
-                  onFinish={() => setAppReady(true)}
-                  minDuration={1600}
-                />
-              )}
-            </GestureHandlerRootView>
+            <LocationProvider>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <RootLayoutNav />
+                <ChangeLocationModal />
+                {!appReady && (
+                  <CarLoadingScreen
+                    onFinish={() => setAppReady(true)}
+                    minDuration={1600}
+                  />
+                )}
+              </GestureHandlerRootView>
+            </LocationProvider>
           </AppProvider>
         </QueryClientProvider>
       </ErrorBoundary>
