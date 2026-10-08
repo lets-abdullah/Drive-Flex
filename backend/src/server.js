@@ -4,6 +4,7 @@ const config = require('./config');
 const connectDB = require('./db');
 const vehicleRoutes = require('./routes/vehicle.routes');
 const bookingRoutes = require('./routes/booking.routes');
+const authRoutes = require('./routes/auth.routes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -51,6 +52,7 @@ app.get('/api', (req, res) => {
 // Mount Routes
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/auth', authRoutes);
 
 // 404 Route Handler
 app.use((req, res) => {

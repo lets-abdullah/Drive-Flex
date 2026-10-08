@@ -11,7 +11,14 @@ export default function ProfileScreen() {
   const colors = useColors();
   const { session, setSession, bookings, ownerProfile, vehicles, favorites, theme, toggleTheme } = useDriveFlex();
   const displayOwner = ownerProfile ?? owners[1];
-  const recentBookings = bookings.slice(0, 3);
+  const userBookings = session
+    ? bookings.filter(
+        (b) =>
+          b.customer.toLowerCase().trim() === session.name.toLowerCase().trim() ||
+          (session.email && b.customer.toLowerCase().trim() === session.email.toLowerCase().trim())
+      )
+    : bookings;
+  const recentBookings = userBookings.slice(0, 5);
 
   return (
     <Page tabbed>
@@ -53,7 +60,7 @@ export default function ProfileScreen() {
       {/* ─── QUICK METRICS PILL BAR ─── */}
       <View style={[styles.metricsBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.metricItem}>
-          <Text style={[styles.metricVal, { color: colors.foreground }]}>{bookings.length}</Text>
+          <Text style={[styles.metricVal, { color: colors.foreground }]}>{userBookings.length}</Text>
           <Text style={[styles.metricLabel, { color: colors.mutedForeground }]}>Bookings</Text>
         </View>
         <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />

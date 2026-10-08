@@ -42,7 +42,7 @@ export default function AddCarPage() {
     reader.readAsDataURL(file);
   };
 
-  const publish = (event: FormEvent) => {
+  const publish = async (event: FormEvent) => {
     event.preventDefault();
     if (!form.name || !form.brand || !form.model || !form.price || !form.description) return;
     const slug = `${form.brand}-${form.model}-${Date.now()}`.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -58,6 +58,15 @@ export default function AddCarPage() {
       features: form.features.split(',').map((item) => item.trim()).filter(Boolean),
       year: Number(form.year), variant: form.variant,
     };
+    try {
+      await fetch('/api/vehicles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newVehicle),
+      });
+    } catch (err) {
+      console.warn('Could not save car to MongoDB API:', err);
+    }
     localStorage.setItem(publishedVehiclesKey, JSON.stringify([...getPublishedVehicles(), newVehicle]));
     router.push('/owner/dashboard');
   };

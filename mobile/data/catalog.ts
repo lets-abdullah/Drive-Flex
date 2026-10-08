@@ -43,7 +43,15 @@ export type Owner = {
   vehicleIds: string[];
 };
 
-export type Session = { name: string; email: string };
+export type Session = {
+  id?: string;
+  name: string;
+  email: string;
+  role?: 'renter' | 'host';
+  phone?: string;
+  city?: string;
+  businessName?: string;
+};
 
 export type Booking = {
   id?: string;

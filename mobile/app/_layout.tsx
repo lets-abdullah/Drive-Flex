@@ -16,6 +16,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { setBaseUrl } from '@workspace/api-client-react';
 import { AppProvider, useDriveFlex } from '@/context/AppContext';
+import * as Updates from 'expo-updates';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -75,6 +76,24 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
+
+  // Silent Over-The-Air (OTA) Auto-Update checker
+  useEffect(() => {
+    async function checkForUpdates() {
+      if (__DEV__) return;
+      try {
+        const update = await Updates.checkForUpdateAsync();
+        if (update.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync();
+        }
+      } catch (err) {
+        // Silently catch network or offline errors during launch
+        console.log('Update check error (safe to ignore if offline):', err);
+      }
+    }
+    void checkForUpdates();
+  }, []);
 
   if (!fontsLoaded && !fontError) return null;
 

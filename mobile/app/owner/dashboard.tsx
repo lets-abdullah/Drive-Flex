@@ -10,9 +10,28 @@ import { useColors } from '@/hooks/useColors';
 
 export default function OwnerDashboardScreen() {
   const colors = useColors();
-  const { ownerProfile, bookings, vehicles, cancelBooking, apiConfigured, apiError } = useDriveFlex();
-  const host = ownerProfile ?? owners[1];
-  const ownerVehicleIds = vehicles.filter((vehicle) => vehicle.ownerId === host.id).map((vehicle) => vehicle.id);
+  const { session, ownerProfile, bookings, vehicles, cancelBooking, apiConfigured, apiError } = useDriveFlex();
+  const host = session?.role === 'host' ? {
+    id: session.id || 'host',
+    slug: 'host-slug',
+    fullName: session.name,
+    businessName: session.businessName || session.name,
+    ownerType: 'Car Rental Business',
+    city: session.city || 'Lahore',
+    location: session.city || 'Lahore',
+    phone: session.phone || '',
+    email: session.email,
+    yearsExperience: 3,
+    description: 'Verified DriveFlex Host',
+    profileImage: '',
+    verified: true,
+    vehicleIds: [],
+    businessLocation: session.city || 'Lahore',
+  } : (ownerProfile ?? owners[1]);
+
+  const ownerVehicleIds = vehicles
+    .filter((vehicle) => vehicle.ownerId === host.id || (session?.role === 'host' && vehicle.provider?.toLowerCase().includes(host.businessName.toLowerCase())))
+    .map((vehicle) => vehicle.id);
   const hostBookings = bookings.filter((booking) => ownerVehicleIds.includes(booking.vehicleId) && booking.status !== 'Cancelled');
   const earnings = hostBookings.reduce((sum, booking) => sum + (booking.totalAmount ?? 0), 0);
   return (

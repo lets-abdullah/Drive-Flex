@@ -104,6 +104,12 @@ const VehicleService = {
         : null,
     };
   },
+  /**
+   * Create a new vehicle in database
+   */
+  createVehicle: async (data) => {
+    return VehicleModel.create(data);
+  },
 };
 
 module.exports = VehicleService;

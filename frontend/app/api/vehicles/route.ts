@@ -64,3 +64,76 @@ export async function GET() {
     });
   }
 }
+
+export async function POST(request: Request) {
+  try {
+    const conn = await connectDB();
+    if (!conn) {
+      return NextResponse.json({ success: false, message: 'Database connection failed' }, { status: 503 });
+    }
+
+    const body = await request.json();
+    const {
+      brand,
+      model,
+      category = 'Premium',
+      location,
+      pricePerDay,
+      seats = 5,
+      transmission = 'Automatic',
+      fuelType = 'Gasoline',
+      description = '',
+      image,
+      gallery,
+      ownerId = 'demo-owner',
+      provider = 'Drive Flex verified host',
+      features = [],
+      range = null,
+    } = body;
+
+    if (!brand || !model || !location || !pricePerDay) {
+      return NextResponse.json(
+        { success: false, message: 'Brand, model, location, and pricePerDay are required' },
+        { status: 400 }
+      );
+    }
+
+    const id = body.id || `veh-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const slug = body.slug || `${brand}-${model}-${Date.now()}`.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+    const defaultImg = image || 'https://images.pexels.com/photos/244206/pexels-photo-244206.jpeg?auto=compress&cs=tinysrgb&w=1600';
+    const vehicleDoc = new VehicleModel({
+      id,
+      slug,
+      brand,
+      model,
+      category,
+      location,
+      pricePerDay: Number(pricePerDay),
+      seats: Number(seats) || 5,
+      transmission,
+      fuelType,
+      description,
+      image: defaultImg,
+      gallery: Array.isArray(gallery) && gallery.length > 0 ? gallery : [defaultImg],
+      ownerId,
+      provider,
+      features: Array.isArray(features) ? features : [],
+      range,
+    });
+
+    await vehicleDoc.save();
+
+    return NextResponse.json({
+      success: true,
+      message: 'Vehicle listed successfully in database',
+      data: vehicleDoc.toObject(),
+    }, { status: 201 });
+  } catch (error: any) {
+    console.error('Error creating vehicle in MongoDB:', error);
+    return NextResponse.json(
+      { success: false, message: error.message || 'Failed to create vehicle' },
+      { status: 500 }
+    );
+  }
+}

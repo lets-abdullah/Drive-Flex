@@ -59,6 +59,32 @@ const VehicleController = {
       next(err);
     }
   },
+
+  createVehicle: async (req, res, next) => {
+    try {
+      const { brand, model, location, pricePerDay } = req.body;
+      if (!brand || !model || !location || !pricePerDay) {
+        return res.status(400).json({
+          success: false,
+          message: 'Brand, model, location, and pricePerDay are required',
+        });
+      }
+
+      const slug = req.body.slug || `${brand}-${model}-${Date.now()}`.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const vehicle = await VehicleService.createVehicle({
+        ...req.body,
+        slug,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Vehicle listed successfully',
+        data: vehicle,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
 };
 
 module.exports = VehicleController;
