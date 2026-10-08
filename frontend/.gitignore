@@ -39,3 +39,6 @@ next-env.d.ts
 # local tooling / generated configs
 .config/
 .agents/
+
+.vercel
+.env*
