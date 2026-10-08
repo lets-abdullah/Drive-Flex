@@ -6,13 +6,16 @@ import type { Vehicle } from '@/types';
 import { formatMoney } from '@/utils/helpers';
 import { useFavorites } from '@/hooks/use-favorites';
 import { useBookingStatus } from '@/hooks/use-booking-status';
+import { useLocationFilter } from '@/context/location-context';
 import { FavoriteButton } from '@/components/favorite-button';
 import { OwnerIdentity } from '@/components/owners/owner-identity';
 
 export function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
   const { favorites, toggle } = useFavorites();
   const { isVehicleBooked } = useBookingStatus(vehicle);
+  const { isFilterActive, getDistanceToVehicle } = useLocationFilter();
   const booked = isVehicleBooked(vehicle.id);
+  const distance = isFilterActive ? getDistanceToVehicle(vehicle) : null;
 
   return (
     <article className={`vehicle-card ${booked ? 'is-card-booked' : ''}`} data-testid={`card-vehicle-${vehicle.id}`}>
@@ -40,6 +43,11 @@ export function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
         <h3 className="vehicle-title">{vehicle.brand} {vehicle.model}</h3>
         <div className="vehicle-meta">
           <span><MapPin size={13} /> {vehicle.location}</span>
+          {distance !== null && (
+            <span className="distance-badge" title={`Approximately ${distance} km from ${vehicle.location}`}>
+              {distance} km away
+            </span>
+          )}
           <span className="rating"><Star size={12} fill="currentColor" /> {vehicle.rating}</span>
           <span><Users size={13} /> {vehicle.seats}</span>
         </div>

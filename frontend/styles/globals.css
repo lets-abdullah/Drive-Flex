@@ -2553,7 +2553,7 @@ p {
 
 .dashboard-section-heading {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 15px;
   margin-bottom: 23px;
@@ -3739,4 +3739,490 @@ p {
   .picker-card {
     width: 100%;
   }
+}
+
+/* ─── Facebook Marketplace Style Location Modal ───────────────────────── */
+.fb-location-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fbFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fbFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fb-location-modal {
+  width: 100%;
+  max-width: 520px;
+  background: #242526;
+  border: 1px solid #3e4042;
+  border-radius: 12px;
+  box-shadow: 0 12px 28px 0 rgba(0, 0, 0, 0.6), 0 2px 4px 0 rgba(0, 0, 0, 0.3);
+  color: #e4e6eb;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  animation: fbScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fbScaleUp {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.fb-location-header {
+  position: relative;
+  padding: 16px 20px;
+  border-bottom: 1px solid #393a3b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fb-location-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #e4e6eb;
+  letter-spacing: -0.2px;
+}
+
+.fb-close-btn {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #3a3b3c;
+  border: none;
+  color: #b0b3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.fb-close-btn:hover {
+  background: #4e4f50;
+  color: #e4e6eb;
+}
+
+.fb-location-subtitle {
+  margin: 14px 20px 10px 20px;
+  font-size: 0.88rem;
+  color: #b0b3b8;
+  line-height: 1.35;
+}
+
+.fb-field-group {
+  position: relative;
+  padding: 0 20px;
+  margin-bottom: 10px;
+}
+
+.fb-input-box {
+  background: #3a3b3c;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.fb-input-box:hover {
+  background: #444547;
+}
+
+.fb-input-box:focus-within {
+  border-color: #1877f2;
+  background: #3e4042;
+}
+
+.fb-input-icon {
+  margin-right: 12px;
+  color: #b0b3b8;
+  display: flex;
+  align-items: center;
+}
+
+.fb-input-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.fb-input-label {
+  font-size: 0.72rem;
+  color: #b0b3b8;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.fb-input-val {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e4e6eb;
+  font-size: 0.98rem;
+  font-weight: 500;
+  padding: 0;
+  width: 100%;
+}
+
+.fb-static-val {
+  display: block;
+  user-select: none;
+}
+
+.fb-chevron {
+  color: #b0b3b8;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.fb-suggestions-dropdown,
+.fb-radius-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 20px;
+  right: 20px;
+  z-index: 100;
+  background: #242526;
+  border: 1px solid #3e4042;
+  border-radius: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  padding: 6px;
+}
+
+.fb-suggestion-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #e4e6eb;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.fb-suggestion-item:hover {
+  background: #3a3b3c;
+}
+
+.fb-suggestion-item.is-active {
+  background: #1877f2;
+  color: #ffffff;
+}
+
+.fb-no-suggestions {
+  padding: 12px;
+  font-size: 0.85rem;
+  color: #b0b3b8;
+  text-align: center;
+}
+
+/* ─── Visual Map ──────────────────────────────────────────────────────── */
+.fb-map-container {
+  position: relative;
+  margin: 6px 20px 16px 20px;
+  height: 260px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #393a3b;
+  background: #192f25;
+}
+
+.fb-map-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.fb-map-country {
+  fill: #85a396;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  opacity: 0.55;
+}
+
+.fb-map-label {
+  fill: #e4e6eb;
+  font-size: 10.5px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.fb-gps-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: none;
+  color: #1c1e21;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+  transition: transform 0.15s, background 0.15s;
+}
+
+.fb-gps-btn:hover {
+  background: #f0f2f5;
+  transform: scale(1.04);
+}
+
+.fb-gps-btn.is-locating {
+  animation: fbSpin 1s linear infinite;
+}
+
+@keyframes fbSpin {
+  100% { transform: rotate(360deg); }
+}
+
+.fb-center-pin-tag {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  z-index: 8;
+  transition: left 0.3s cubic-bezier(0.16, 1, 0.3, 1), top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fb-pin-head {
+  width: 18px;
+  height: 18px;
+  border-radius: 50% 50% 50% 0;
+  background: #fa383e;
+  transform: rotate(-45deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+}
+
+.fb-pin-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+  transform: rotate(45deg);
+}
+
+.fb-pin-text {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 1px 6px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+}
+
+.fb-info-icon {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  color: #92ab9f;
+  background: rgba(0, 0, 0, 0.4);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* ─── Footer Buttons ──────────────────────────────────────────────────── */
+.fb-location-footer {
+  padding: 14px 20px;
+  border-top: 1px solid #393a3b;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #242526;
+}
+
+.fb-reset-btn {
+  background: transparent;
+  border: 1px solid #3e4042;
+  border-radius: 6px;
+  color: #b0b3b8;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.fb-reset-btn:hover {
+  background: #3a3b3c;
+  color: #e4e6eb;
+  border-color: #4e4f50;
+}
+
+.fb-apply-btn {
+  background: #1877f2;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 9px 24px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.fb-apply-btn:hover {
+  background: #166fe5;
+}
+
+.fb-apply-btn:active {
+  transform: scale(0.98);
+}
+
+/* ─── Navbar & Search Location Badge ──────────────────────────────────── */
+.navbar-location-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: rgba(201, 162, 39, 0.1);
+  border: 1px solid rgba(201, 162, 39, 0.35);
+  color: #e4e6eb;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+
+.navbar-location-btn:hover {
+  background: rgba(201, 162, 39, 0.18);
+  border-color: #c9a227;
+  color: #ffffff;
+}
+
+.navbar-location-btn.is-active {
+  background: rgba(24, 119, 242, 0.15);
+  border-color: #1877f2;
+  color: #60a5fa;
+}
+
+.navbar-location-btn.is-active:hover {
+  background: rgba(24, 119, 242, 0.25);
+  border-color: #3b82f6;
+  color: #93c5fd;
+}
+
+.navbar-location-pin {
+  color: #c9a227;
+  flex-shrink: 0;
+}
+
+.navbar-location-btn.is-active .navbar-location-pin {
+  color: #3b82f6;
+}
+
+/* ─── Vehicle Card Distance Badge ─────────────────────────────────────── */
+.distance-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+/* ─── Location Filter Banner ──────────────────────────────────────────── */
+.location-filter-banner {
+  background: rgba(24, 119, 242, 0.1);
+  border: 1px solid rgba(24, 119, 242, 0.3);
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.location-filter-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: #e4e6eb;
+}
+
+.location-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.location-filter-link {
+  font-size: 0.82rem;
+  color: #60a5fa;
+  font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.location-filter-clear {
+  font-size: 0.82rem;
+  color: #b0b3b8;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.location-filter-clear:hover {
+  color: #f87171;
 }

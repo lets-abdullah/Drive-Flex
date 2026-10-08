@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import '../styles/globals.css';
+import { LocationProvider } from '@/context/location-context';
+import { ChangeLocationModal } from '@/components/location/change-location-modal';
 
 export const metadata: Metadata = {
   title: 'Drive Flex',
@@ -9,7 +11,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <LocationProvider>
+          {children}
+          <ChangeLocationModal />
+        </LocationProvider>
+      </body>
     </html>
   );
 }

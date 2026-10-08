@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Menu, UserRound, X, LogOut, LayoutDashboard, Car, PlusCircle } from 'lucide-react';
+import { Menu, UserRound, X, LogOut, LayoutDashboard, Car, PlusCircle, MapPin } from 'lucide-react';
 import { useSession } from '@/hooks/use-session';
 import { setSession } from '@/utils/helpers';
+import { useLocationFilter } from '@/context/location-context';
 
 const navLinks = [
   ['/', 'Home'],
@@ -19,6 +20,7 @@ export function Navbar() {
   const location = usePathname();
   const router = useRouter();
   const session = useSession();
+  const { currentCity, radiusKm, isFilterActive, openModal } = useLocationFilter();
 
   const handleSignOut = () => {
     setSession(null);
@@ -63,6 +65,20 @@ export function Navbar() {
         </nav>
 
         <div className="nav-actions">
+          {/* Location & Radius Button (FB Marketplace Style) */}
+          <button
+            type="button"
+            className={`navbar-location-btn ${isFilterActive ? 'is-active' : ''}`}
+            onClick={openModal}
+            title="Change search location & radius"
+            data-testid="btn-change-location"
+          >
+            <MapPin size={13} className="navbar-location-pin" />
+            <span>
+              {currentCity.name} · {radiusKm} km
+            </span>
+          </button>
+
           {session ? (
             <>
               {isHost ? (
@@ -132,6 +148,23 @@ export function Navbar() {
 
       {/* Mobile Menu */}
       <div className={`mobile-menu ${menuOpen ? 'is-open' : ''}`}>
+        <div style={{ padding: '8px 0 16px 0', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', marginBottom: '8px' }}>
+          <button
+            type="button"
+            className={`navbar-location-btn ${isFilterActive ? 'is-active' : ''}`}
+            onClick={() => {
+              setMenuOpen(false);
+              openModal();
+            }}
+            style={{ width: '100%', justifyContent: 'center', padding: '10px 16px' }}
+          >
+            <MapPin size={14} className="navbar-location-pin" />
+            <span>
+              Location: {currentCity.name} ({radiusKm} km radius)
+            </span>
+          </button>
+        </div>
+
         {navLinks.map(([href, label]) => (
           <Link
             key={href}

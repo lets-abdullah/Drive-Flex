@@ -24,6 +24,7 @@ import { Layout } from '@/components/layout';
 import { VehicleCard } from '@/components/vehicles/vehicle-card';
 import { allCars } from '@/data/vehicles';
 import type { Vehicle } from '@/types';
+import { useLocationFilter } from '@/context/location-context';
 
 const CATEGORIES = [
   { name: 'All', icon: Car },
@@ -53,6 +54,7 @@ export default function AllListingsPage() {
   const [maxPrice, setMaxPrice] = useState<number>(350);
   const [sortBy, setSortBy] = useState<'recommended' | 'price-asc' | 'price-desc' | 'rating'>('recommended');
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const { currentCity, radiusKm, isFilterActive, openModal, clearFilter, applyLocation, getDistanceToVehicle } = useLocationFilter();
 
   // Fetch live vehicles from API with fallback to built-in fleet
   useEffect(() => {
@@ -112,12 +114,25 @@ export default function AllListingsPage() {
           return false;
         }
 
+        // Location & Radius Filter (Facebook Marketplace Style)
+        if (isFilterActive) {
+          const dist = getDistanceToVehicle(vehicle);
+          if (dist === null || dist > radiusKm) {
+            return false;
+          }
+        }
+
         return true;
       })
       .sort((a, b) => {
         if (sortBy === 'price-asc') return a.pricePerDay - b.pricePerDay;
         if (sortBy === 'price-desc') return b.pricePerDay - a.pricePerDay;
         if (sortBy === 'rating') return b.rating - a.rating;
+        if (isFilterActive) {
+          const distA = getDistanceToVehicle(a) ?? 9999;
+          const distB = getDistanceToVehicle(b) ?? 9999;
+          return distA - distB;
+        }
         return 0; // recommended
       });
   }, [
@@ -129,6 +144,9 @@ export default function AllListingsPage() {
     availabilityFilter,
     maxPrice,
     sortBy,
+    isFilterActive,
+    radiusKm,
+    getDistanceToVehicle,
   ]);
 
   const activeFilterCount =
@@ -365,7 +383,39 @@ export default function AllListingsPage() {
                   </div>
                 </div>
 
-                {/* 3. Location / City */}
+                {/* 3. Location Radius (Facebook Marketplace Style) */}
+                <div className="filter-block">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span className="filter-block-label" style={{ margin: 0 }}>
+                      <MapPin size={14} /> Radius Filter
+                    </span>
+                    {isFilterActive && (
+                      <button
+                        type="button"
+                        onClick={clearFilter}
+                        style={{ background: 'none', border: 'none', color: '#ff6b81', fontSize: '0.75rem', cursor: 'pointer' }}
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openModal}
+                    className={`navbar-location-btn ${isFilterActive ? 'is-active' : ''}`}
+                    style={{ width: '100%', justifyContent: 'center', padding: '10px 12px', borderRadius: '8px' }}
+                  >
+                    <MapPin size={14} className="navbar-location-pin" />
+                    <span>
+                      {currentCity.name} · {radiusKm} km radius
+                    </span>
+                  </button>
+                  <small style={{ display: 'block', color: 'var(--muted-foreground)', fontSize: '0.74rem', marginTop: '6px' }}>
+                    Filter listings within radius on interactive map
+                  </small>
+                </div>
+
+                {/* 4. Location / City */}
                 <div className="filter-block">
                   <label htmlFor="city-select" className="filter-block-label">
                     <MapPin size={14} /> City & Region
@@ -491,6 +541,34 @@ export default function AllListingsPage() {
                 RIGHT AREA: TOP SORT TOOLBAR + FLEET CARDS GRID
             -------------------------------------------------------------------- */}
             <div className="fleet-main-content">
+              {/* Active Location Filter Banner (Facebook Marketplace style) */}
+              {isFilterActive && (
+                <div className="location-filter-banner" style={{ marginBottom: '16px' }}>
+                  <div className="location-filter-banner-info">
+                    <MapPin size={16} className="gold" />
+                    <span>
+                      Showing vehicles within <strong>{radiusKm} km</strong> of <strong>{currentCity.name}</strong>
+                    </span>
+                  </div>
+                  <div className="location-filter-banner-actions">
+                    <button
+                      type="button"
+                      className="location-filter-banner-btn"
+                      onClick={openModal}
+                    >
+                      Change Radius
+                    </button>
+                    <button
+                      type="button"
+                      className="location-filter-banner-btn reset"
+                      onClick={clearFilter}
+                    >
+                      Show All Cities
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Top Action / Results Bar */}
               <div className="catalog-top-bar">
                 <div className="results-info">
@@ -572,17 +650,41 @@ export default function AllListingsPage() {
                   </div>
                   <h3>No vehicles match these criteria</h3>
                   <p>
-                    We couldn't find any fleet listings matching your selected filters. Try broadening your budget or
-                    removing city restrictions.
+                    {isFilterActive
+                      ? `No listings found within ${radiusKm} km of ${currentCity.name}. Try expanding your search radius to 250 km or 500 km.`
+                      : "We couldn't find any fleet listings matching your selected filters. Try broadening your budget or removing city restrictions."}
                   </p>
-                  <button
-                    type="button"
-                    className="btn btn-gold btn-sm"
-                    onClick={resetFilters}
-                    data-testid="button-empty-clear"
-                  >
-                    <RotateCcw size={14} /> Clear all filters
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    {isFilterActive && radiusKm < 250 && (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => applyLocation(currentCity, 250)}
+                      >
+                        Expand to 250 km
+                      </button>
+                    )}
+                    {isFilterActive && (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => applyLocation(currentCity, 500)}
+                      >
+                        Expand to 500 km
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-gold btn-sm"
+                      onClick={() => {
+                        resetFilters();
+                        clearFilter();
+                      }}
+                      data-testid="button-empty-clear"
+                    >
+                      <RotateCcw size={14} /> Clear all filters
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="fleet-catalog-grid">

@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { Compass } from 'lucide-react';
+import { Compass, MapPin } from 'lucide-react';
 import type { Vehicle } from '@/types';
 import { todayString } from '@/utils/helpers';
 import { allCars } from '@/data/vehicles';
 import { datesOverlap } from '@/data/vehicles';
+import { useLocationFilter } from '@/context/location-context';
 
 export function SearchPanel({ onResults }: { onResults: (items: Vehicle[], message: string) => void }) {
+  const { currentCity, radiusKm, isFilterActive, openModal } = useLocationFilter();
   const [pickup, setPickup] = useState('');
   const [dropoff, setDropoff] = useState('');
   const [start, setStart] = useState('');
@@ -39,12 +41,26 @@ export function SearchPanel({ onResults }: { onResults: (items: Vehicle[], messa
     <form className="search-panel container-wide" onSubmit={submit} noValidate>
       <div className="search-top">
         <span className="eyebrow">Find your next drive</span>
-        <span>Availability checked in real time</span>
+        <button
+          type="button"
+          onClick={openModal}
+          className="navbar-location-btn"
+          style={{ fontSize: '0.78rem', padding: '4px 10px' }}
+        >
+          <MapPin size={13} className="navbar-location-pin" />
+          <span>{currentCity.name} · {radiusKm} km</span>
+        </button>
       </div>
       <div className="search-grid">
         <div className="field">
           <label htmlFor="pickup-location">Pickup location</label>
-          <input id="pickup-location" value={pickup} onChange={(e) => setPickup(e.target.value)} placeholder="City or airport" data-testid="input-pickup-location" />
+          <input
+            id="pickup-location"
+            value={pickup}
+            onChange={(e) => setPickup(e.target.value)}
+            placeholder={`e.g. ${currentCity.name} or airport`}
+            data-testid="input-pickup-location"
+          />
         </div>
         <div className="field">
           <label htmlFor="dropoff-location">Return location</label>

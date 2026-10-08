@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { ArrowRight, BadgeCheck, CalendarDays, CarFront, Check, CheckCircle2, CircleAlert, Clock3, Compass, MapPin, MessageSquare, ShieldCheck, Sparkles, Star, UserCheck, Users, Zap } from 'lucide-react';
 import { Layout } from '@/components/layout';
@@ -9,6 +9,7 @@ import { SearchPanel } from '@/components/vehicles/search-panel';
 import { owners } from '@/data/owners';
 import { vehicles } from '@/data/vehicles';
 import type { Vehicle } from '@/types';
+import { useLocationFilter } from '@/context/location-context';
 import { WhyDriveFlex } from '@/components/home/why-drive-flex';
 import { ClearerRoute } from '@/components/home/clearer-route';
 import { DiscerningOwners } from '@/components/home/discerning-owners';
@@ -17,6 +18,15 @@ import { PremiumEdit } from '@/components/home/premium-edit';
 export default function HomePage() {
   const [results, setResults] = useState<Vehicle[] | null>(null);
   const [resultMessage, setResultMessage] = useState('');
+  const { currentCity, radiusKm, isFilterActive, openModal, clearFilter, applyLocation, filterVehicles } = useLocationFilter();
+
+  const displayVehicles = useMemo(() => {
+    if (results) return results;
+    if (isFilterActive) {
+      return filterVehicles(vehicles);
+    }
+    return vehicles.slice(0, 8);
+  }, [results, isFilterActive, filterVehicles]);
 
   return (
     <Layout>
@@ -60,6 +70,27 @@ export default function HomePage() {
               </div>
               <p>{results ? resultMessage : 'From the first key turn to the last mile, every vehicle in our marketplace earns its place.'}</p>
             </div>
+
+            {/* Active Location Filter Banner (Facebook Marketplace style) */}
+            {isFilterActive && !results && (
+              <div className="location-filter-banner" style={{ marginBottom: '24px' }}>
+                <div className="location-filter-banner-info">
+                  <MapPin size={16} className="gold" />
+                  <span>
+                    Showing listings within <strong>{radiusKm} km</strong> of <strong>{currentCity.name}</strong>
+                  </span>
+                </div>
+                <div className="location-filter-banner-actions">
+                  <button type="button" className="location-filter-banner-btn" onClick={openModal}>
+                    Change Radius
+                  </button>
+                  <button type="button" className="location-filter-banner-btn reset" onClick={clearFilter}>
+                    Show All
+                  </button>
+                </div>
+              </div>
+            )}
+
             {results && results.length === 0 ? (
               <div className="empty-state">
                 <CircleAlert size={24} className="gold" />
@@ -67,10 +98,24 @@ export default function HomePage() {
                 <p>Try searching "anywhere" for a broader look at the current fleet.</p>
                 <button className="btn btn-outline btn-sm" onClick={() => setResults(null)} data-testid="button-clear-search">View featured fleet</button>
               </div>
+            ) : displayVehicles.length === 0 ? (
+              <div className="empty-state">
+                <CircleAlert size={24} className="gold" />
+                <h3>No vehicles within {radiusKm} km of {currentCity.name}</h3>
+                <p>Expand your radius to view nearby vehicles in adjacent cities.</p>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '12px' }}>
+                  <button className="btn btn-outline btn-sm" onClick={() => applyLocation(currentCity, 250)}>
+                    Expand to 250 km
+                  </button>
+                  <button className="btn btn-gold btn-sm" onClick={() => applyLocation(currentCity, 500)}>
+                    Expand to 500 km
+                  </button>
+                </div>
+              </div>
             ) : (
               <>
                 <div className="fleet-grid">
-                  {(results || vehicles.slice(0, 8)).map((vehicle) => <VehicleCard key={vehicle.id} vehicle={vehicle} />)}
+                  {displayVehicles.map((vehicle) => <VehicleCard key={vehicle.id} vehicle={vehicle} />)}
                 </div>
                 <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
                   <Link href="/cars" className="btn btn-gold" data-testid="link-view-all-listings">
