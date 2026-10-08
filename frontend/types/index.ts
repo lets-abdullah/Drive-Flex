@@ -65,8 +65,18 @@ export type Vehicle = {
   } | null;
 };
 
-// ─── Session & Auth Types ──────────────────────────────────────────────────────
-export type Session = { name: string; email: string };
+export type UserRole = 'host' | 'renter';
+
+export type Session = {
+  id?: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  phone?: string;
+  city?: string;
+  businessName?: string;
+  ownerId?: string;
+};
 
 export type DemoOwnerProfile = Owner & { cnic: string; businessLocation: string };
 

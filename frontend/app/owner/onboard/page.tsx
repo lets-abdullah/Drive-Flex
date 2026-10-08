@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, BadgeCheck, Check, CheckCircle2, ImagePlus, LayoutDashboard, Pencil, ShieldCheck } from 'lucide-react';
 import { Layout } from '@/components/layout';
-import { getDemoOwner, ownerProfileKey } from '@/utils/helpers';
+import { getDemoOwner, ownerProfileKey, setSession } from '@/utils/helpers';
 import type { Owner, OwnerType } from '@/types';
 import type { DemoOwnerProfile } from '@/types';
 
@@ -48,6 +48,16 @@ export default function OnboardingPage() {
       businessLocation: form.businessLocation || form.city,
     };
     localStorage.setItem(ownerProfileKey, JSON.stringify(owner));
+    setSession({
+      id: owner.id,
+      name: owner.fullName,
+      email: owner.email,
+      role: 'host',
+      phone: owner.phone,
+      city: owner.city,
+      businessName: owner.businessName,
+      ownerId: owner.id,
+    });
     setSubmitted(true);
     setStep(3);
   };

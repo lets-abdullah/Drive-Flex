@@ -55,6 +55,20 @@ export default function ProfilePage() {
           <button className="btn btn-outline btn-sm" onClick={() => setSession(null)} data-testid="button-sign-out">Sign out</button>
         </div>
 
+        {session.role === 'host' && (
+          <div className="container" style={{ marginBottom: '1.5rem' }}>
+            <div style={{ background: 'rgba(201, 162, 39, 0.1)', border: '1px solid var(--gold, #c9a227)', borderRadius: '8px', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <strong style={{ color: 'var(--gold, #c9a227)' }}>Host / Lister Account Detected</strong>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.88rem' }}>You have host privileges to list vehicles and view bookings.</p>
+              </div>
+              <Link href="/owner/dashboard" className="btn btn-gold btn-sm">
+                Open Host Dashboard →
+              </Link>
+            </div>
+          </div>
+        )}
+
         <div className="container profile-grid">
           <section className="profile-panel">
             <h2>Profile details</h2>
