@@ -68,9 +68,16 @@ export default function HomePage() {
                 <button className="btn btn-outline btn-sm" onClick={() => setResults(null)} data-testid="button-clear-search">View featured fleet</button>
               </div>
             ) : (
-              <div className="fleet-grid">
-                {(results || vehicles.slice(0, 8)).map((vehicle) => <VehicleCard key={vehicle.id} vehicle={vehicle} />)}
-              </div>
+              <>
+                <div className="fleet-grid">
+                  {(results || vehicles.slice(0, 8)).map((vehicle) => <VehicleCard key={vehicle.id} vehicle={vehicle} />)}
+                </div>
+                <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
+                  <Link href="/cars" className="btn btn-gold" data-testid="link-view-all-listings">
+                    VIEW ALL LISTINGS ({vehicles.length}+ FLEET) <ArrowRight size={15} />
+                  </Link>
+                </div>
+              </>
             )}
           </div>
         </section>

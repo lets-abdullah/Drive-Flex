@@ -6,7 +6,12 @@ import { usePathname } from 'next/navigation';
 import { Menu, UserRound, X } from 'lucide-react';
 import { useSession } from '@/hooks/use-session';
 
-const navLinks = [['/', 'Home'], ['/about', 'About'], ['/contact', 'Contact']] as const;
+const navLinks = [
+  ['/', 'Home'],
+  ['/cars', 'All Fleet'],
+  ['/about', 'About'],
+  ['/contact', 'Contact'],
+] as const;
 
 export function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
