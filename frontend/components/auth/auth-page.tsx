@@ -7,6 +7,7 @@ import { ArrowRight, CircleAlert, ShieldAlert, KeyRound, User, Briefcase, Car } 
 import { Layout } from '@/components/layout';
 import { setSession } from '@/utils/helpers';
 import type { UserRole } from '@/types';
+import { AutoLocationField } from '@/components/location/auto-location-field';
 
 interface AuthPageProps {
   mode: 'signin' | 'register';
@@ -224,21 +225,12 @@ export function AuthPage({ mode, defaultRole }: AuthPageProps) {
                     data-testid="input-auth-business"
                   />
                 </div>
-                <div className="form-field">
-                  <label htmlFor="auth-city">Primary City</label>
-                  <select
-                    id="auth-city"
-                    value={form.city}
-                    onChange={(e) => setForm({ ...form, city: e.target.value })}
-                    className="auth-select"
-                    data-testid="select-auth-city"
-                  >
-                    <option value="Lahore">Lahore</option>
-                    <option value="Karachi">Karachi</option>
-                    <option value="Islamabad">Islamabad</option>
-                    <option value="Rawalpindi">Rawalpindi</option>
-                  </select>
-                </div>
+                <AutoLocationField
+                  id="auth-city"
+                  value={form.city}
+                  onChange={(city) => setForm({ ...form, city })}
+                  label="Primary City"
+                />
               </>
             )}
 

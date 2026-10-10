@@ -161,100 +161,24 @@ export default function AllListingsPage() {
     <Layout>
       <main className="fleets-experience">
         {/* =========================================================================
-            1. UNIQUE HERO SECTION (Distinctive luxury automotive showroom aesthetic)
+            1. FLEET HERO SECTION (Standardized dimension matching About & Contact pages)
         ========================================================================== */}
-        <section className="unique-fleet-hero">
-          <div className="hero-atmosphere-glow" />
-          <div className="hero-grid-pattern" />
-
-          <div className="container hero-content-wrap">
-            {/* Breadcrumb Navigation */}
-            <nav className="fleet-breadcrumbs" aria-label="Breadcrumb">
-              <Link href="/">Home</Link>
-              <ChevronRight size={13} className="bc-sep" />
-              <span className="current-crumb">Fleet Directory</span>
-            </nav>
-
-            {/* Premium Eyebrow Pill */}
-            <div className="fleet-pill-badge">
-              <span className="sparkle-icon">✦</span>
-              <span>COMPLETE CURATED DIRECTORY · ALL PAKISTAN LOCATIONS</span>
-            </div>
-
-            {/* Hero Main Heading & Copy */}
-            <div className="hero-headline-block">
-              <h1>
-                The Complete <span className="gold-text">DriveFlex</span> Fleet.
-              </h1>
-              <p className="hero-lead">
-                Explore handpicked vehicles across Lahore, Karachi, and Islamabad. From rugged 4x4 Fortuners to executive
-                turbo sedans, book directly with verified local hosts with zero hidden fees.
-              </p>
-            </div>
-
-            {/* Quick Filter Jump Tags */}
-            <div className="hero-quick-tags">
-              <span className="quick-tag-label">Popular Searches:</span>
-              <button
-                type="button"
-                className="quick-tag"
-                onClick={() => {
-                  setSelectedCategory('SUV');
-                }}
-              >
-                7-Seater SUVs
-              </button>
-              <button
-                type="button"
-                className="quick-tag"
-                onClick={() => {
-                  setSelectedCategory('Sedan');
-                }}
-              >
-                Executive Sedans
-              </button>
-              <button
-                type="button"
-                className="quick-tag"
-                onClick={() => {
-                  setMaxPrice(80);
-                }}
-              >
-                Under $80 / Day
-              </button>
-              <button
-                type="button"
-                className="quick-tag"
-                onClick={() => {
-                  setAvailabilityFilter('available');
-                }}
-              >
-                Ready for Pickup
-              </button>
-            </div>
-
-            {/* Live Fleet Metrics Counter */}
-            <div className="hero-metrics-strip">
-              <div className="metric-box">
-                <span className="metric-value">{vehiclesList.length}+</span>
-                <span className="metric-label">Curated Vehicles</span>
-              </div>
-              <div className="metric-sep" />
-              <div className="metric-box">
-                <span className="metric-value">4</span>
-                <span className="metric-label">Key Pakistani Cities</span>
-              </div>
-              <div className="metric-sep" />
-              <div className="metric-box">
-                <span className="metric-value">4.92 ★</span>
-                <span className="metric-label">Average Fleet Rating</span>
-              </div>
-              <div className="metric-sep" />
-              <div className="metric-box">
-                <span className="metric-value">100%</span>
-                <span className="metric-label">Host Verified Handover</span>
-              </div>
-            </div>
+        <section className="page-hero page-hero--fleet">
+          <img
+            src="/fleet-hero.jpg"
+            alt="The Complete DriveFlex Fleet"
+            className="fleet-hero-bg"
+          />
+          <div className="fleet-hero-overlay" />
+          <div className="container">
+            <div className="eyebrow">The complete collection</div>
+            <h1>
+              The Complete<br />
+              <span className="gold">DriveFlex fleet.</span>
+            </h1>
+            <p>
+              Explore handpicked luxury vehicles across Lahore, Karachi, and Islamabad. From rugged 4×4 Fortuners to executive turbo sedans, book directly with verified local hosts.
+            </p>
           </div>
         </section>
 
@@ -647,146 +571,6 @@ export default function AllListingsPage() {
           SCOPED LUXURY STYLES (Fixed Native Selects + Sticky Layout + Hero Glow)
       ========================================================================== */}
       <style jsx>{`
-        /* ─── UNIQUE HERO SECTION ──────────────────────────────────────────────── */
-        .unique-fleet-hero {
-          position: relative;
-          background: linear-gradient(180deg, #121212 0%, #0a0a0a 100%);
-          border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-          padding: 3.5rem 0 2.5rem;
-          overflow: hidden;
-        }
-        .hero-atmosphere-glow {
-          position: absolute;
-          top: -120px;
-          right: 15%;
-          width: 500px;
-          height: 350px;
-          background: radial-gradient(circle, rgba(201, 162, 39, 0.15) 0%, rgba(201, 162, 39, 0) 70%);
-          pointer-events: none;
-          filter: blur(40px);
-        }
-        .hero-grid-pattern {
-          position: absolute;
-          inset: 0;
-          background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-          background-size: 36px 36px;
-          pointer-events: none;
-        }
-        .hero-content-wrap {
-          position: relative;
-          z-index: 2;
-        }
-        .fleet-breadcrumbs {
-          display: flex;
-          align-items: center;
-          gap: 0.4rem;
-          font-size: 0.8rem;
-          color: rgba(255, 255, 255, 0.45);
-          margin-bottom: 1.25rem;
-        }
-        .fleet-breadcrumbs a {
-          color: rgba(255, 255, 255, 0.6);
-          transition: color 0.2s;
-        }
-        .fleet-breadcrumbs a:hover {
-          color: var(--gold, #c9a227);
-        }
-        .current-crumb {
-          color: var(--gold, #c9a227);
-          font-weight: 500;
-        }
-        .fleet-pill-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.5rem;
-          background: rgba(201, 162, 39, 0.08);
-          border: 1px solid rgba(201, 162, 39, 0.25);
-          padding: 0.35rem 0.85rem;
-          border-radius: 30px;
-          font-size: 0.72rem;
-          letter-spacing: 0.08em;
-          color: var(--gold, #c9a227);
-          font-weight: 600;
-          margin-bottom: 1rem;
-        }
-        .sparkle-icon {
-          font-size: 0.8rem;
-        }
-        .hero-headline-block h1 {
-          font-size: clamp(2rem, 4vw, 3.2rem);
-          line-height: 1.15;
-          margin: 0 0 1rem;
-          font-weight: 700;
-          letter-spacing: -0.02em;
-        }
-        .hero-lead {
-          max-width: 720px;
-          color: rgba(255, 255, 255, 0.65);
-          font-size: 1rem;
-          line-height: 1.6;
-          margin: 0 0 1.5rem;
-        }
-        .hero-quick-tags {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          flex-wrap: wrap;
-          margin-bottom: 2rem;
-        }
-        .quick-tag-label {
-          font-size: 0.78rem;
-          color: rgba(255, 255, 255, 0.45);
-          margin-right: 0.25rem;
-        }
-        .quick-tag {
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          color: rgba(255, 255, 255, 0.8);
-          font-size: 0.78rem;
-          padding: 0.3rem 0.75rem;
-          border-radius: 16px;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-        .quick-tag:hover {
-          background: rgba(201, 162, 39, 0.12);
-          border-color: rgba(201, 162, 39, 0.4);
-          color: #fff;
-        }
-        .hero-metrics-strip {
-          display: flex;
-          align-items: center;
-          gap: 1.75rem;
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          border-radius: 10px;
-          padding: 1rem 1.5rem;
-          max-width: 820px;
-          flex-wrap: wrap;
-        }
-        .metric-box {
-          display: flex;
-          flex-direction: column;
-          gap: 0.15rem;
-        }
-        .metric-value {
-          font-size: 1.25rem;
-          font-weight: 700;
-          color: var(--gold, #c9a227);
-        }
-        .metric-label {
-          font-size: 0.75rem;
-          color: rgba(255, 255, 255, 0.5);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-        .metric-sep {
-          width: 1px;
-          height: 32px;
-          background: rgba(255, 255, 255, 0.08);
-        }
-
         /* ─── CATALOG LAYOUT (Sticky Sidebar + Grid) ────────────────────────── */
         .fleet-catalog-section {
           padding: 2rem 0 4rem;
@@ -1328,10 +1112,6 @@ export default function AllListingsPage() {
           }
           .mobile-close-sidebar {
             display: block;
-          }
-          .sidebar-mobile-footer {
-            display: block;
-            margin-top: 0.5rem;
           }
         }
       `}</style>

@@ -8,6 +8,7 @@ import { Layout } from '@/components/layout';
 import { getDemoOwner, ownerProfileKey, setSession } from '@/utils/helpers';
 import type { Owner, OwnerType } from '@/types';
 import type { DemoOwnerProfile } from '@/types';
+import { AutoLocationField } from '@/components/location/auto-location-field';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -107,7 +108,12 @@ export default function OnboardingPage() {
                     <div className="form-field"><label htmlFor="owner-email">Email address</label><input id="owner-email" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="you@business.com" data-testid="input-owner-email" /></div>
                   </div>
                   <div className="form-grid">
-                    <div className="form-field"><label htmlFor="owner-city">City</label><select id="owner-city" value={form.city} onChange={(e) => update('city', e.target.value)} data-testid="select-owner-city">{['Lahore', 'Islamabad', 'Karachi', 'Rawalpindi', 'Faisalabad', 'Multan'].map((city) => <option key={city}>{city}</option>)}</select></div>
+                    <AutoLocationField
+                      id="owner-city"
+                      value={form.city}
+                      onChange={(city) => update('city', city)}
+                      label="City"
+                    />
                     <div className="form-field"><label htmlFor="owner-business">Business / shop name</label><input id="owner-business" value={form.businessName} onChange={(e) => update('businessName', e.target.value)} placeholder="The name customers will remember" data-testid="input-owner-business" /></div>
                   </div>
                   <div className="form-grid">

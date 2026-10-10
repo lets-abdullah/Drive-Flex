@@ -27,8 +27,8 @@ export default function ProfilePage() {
             <h1>Sign in to see your profile.</h1>
             <p>Save favorite cars and keep track of your booking history.</p>
             <div className="hero-actions" style={{ justifyContent: 'center' }}>
-              <Link className="btn btn-primary" href="/sign-in" data-testid="link-profile-signin">Sign in</Link>
-              <Link className="btn btn-outline" href="/register" data-testid="link-profile-register">Create account</Link>
+              <Link className="btn btn-primary" href="/renter?tab=signin" data-testid="link-profile-signin">Sign In as Renter</Link>
+              <Link className="btn btn-outline" href="/renter?tab=register" data-testid="link-profile-register">Create Renter Account</Link>
             </div>
           </div>
         </main>

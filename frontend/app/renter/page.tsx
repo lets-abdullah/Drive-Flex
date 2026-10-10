@@ -3,16 +3,16 @@
 import { useState, type FormEvent, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { 
-  ArrowRight, 
-  User, 
-  ShieldCheck, 
-  Key, 
-  Zap, 
-  CircleAlert, 
-  ShieldAlert, 
-  CheckCircle2, 
-  Lock, 
+import {
+  ArrowRight,
+  User,
+  ShieldCheck,
+  Key,
+  Zap,
+  CircleAlert,
+  ShieldAlert,
+  CheckCircle2,
+  Lock,
   Sparkles,
   CarFront,
   BadgeCheck,
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Layout } from '@/components/layout';
 import { setSession } from '@/utils/helpers';
+import { AutoLocationField } from '@/components/location/auto-location-field';
 
 export default function RenterPortalPage() {
   return (
@@ -89,8 +90,9 @@ function RenterPortalContent() {
 
       setSession(data.user);
       setSuccessMsg('Renter account created successfully! Opening fleet catalog...');
+      const target = searchParams.get('redirect') || '/cars';
       setTimeout(() => {
-        router.push('/cars');
+        router.push(target);
       }, 1200);
     } catch (err: any) {
       setError('Connection error. Please try again.');
@@ -131,8 +133,9 @@ function RenterPortalContent() {
 
       setSession(data.user);
       setSuccessMsg('Signed in successfully! Returning to fleet...');
+      const target = searchParams.get('redirect') || '/cars';
       setTimeout(() => {
-        router.push('/cars');
+        router.push(target);
       }, 1000);
     } catch (err: any) {
       setError('Connection error. Please try again.');
@@ -143,101 +146,40 @@ function RenterPortalContent() {
   return (
     <Layout>
       <main className="renter-portal-page">
-        {/* Luxury Renter Banner */}
-        <section className="renter-hero-banner">
-          <div className="container renter-hero-content">
-            <div className="renter-pill-badge">
-              <Sparkles size={14} className="gold-icon" />
-              <span>DRIVE FLEX DRIVER & RENTER MEMBERSHIP</span>
-            </div>
-            <h1 className="renter-hero-title">
-              Drive Premium Cars with <span className="gold-text">Complete Freedom</span>
-            </h1>
-            <p className="renter-hero-desc">
-              Book luxury sedans, rugged 4x4 SUVs, and sports vehicles with transparent daily rates, 
-              zero paperwork delays, and certified insurance coverage.
-            </p>
-
-            <div className="renter-metrics-strip">
-              <div className="metric-cell">
-                <strong>50+</strong>
-                <span>Curated Vehicles</span>
-              </div>
-              <div className="metric-cell">
-                <strong>4.9 ★</strong>
-                <span>Renter Satisfaction</span>
-              </div>
-              <div className="metric-cell">
-                <strong>0 Hidden Fees</strong>
-                <span>Fixed Daily Rates</span>
-              </div>
-              <div className="metric-cell">
-                <strong>Instant</strong>
-                <span>Key Handover</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
         {/* Dedicated Renter Auth Section */}
         <section className="container renter-auth-section">
           <div className="renter-auth-grid">
             {/* Left: Renter Privileges */}
             <div className="renter-info-card">
-              <div className="eyebrow">EXCLUSIVE RENTER PRIVILEGES</div>
-              <h2>Why Renters Choose Drive Flex</h2>
-              <p className="muted">
-                From executive meetings in Islamabad to weekend getaways in Lahore and Karachi, 
-                experience hassle-free premium car booking.
+              <div className="renter-pill-badge">
+                <Sparkles size={14} className="gold-icon" />
+                <span>DRIVE FLEX DRIVER & RENTER MEMBERSHIP</span>
+              </div>
+              <h1 className="renter-headline">
+                Drive Premium Cars with <span className="gold-text">Complete Freedom</span>
+              </h1>
+              <p className="renter-lead muted">
+                Book luxury sedans, rugged 4x4 SUVs, and sports vehicles with transparent daily rates,
+                zero paperwork delays, and certified insurance coverage.
               </p>
 
-              <div className="renter-perks-list">
-                <div className="perk-item">
-                  <div className="perk-icon-wrap">
-                    <ShieldCheck size={20} className="gold" />
-                  </div>
-                  <div>
-                    <h4>100% Insured & Verified Fleet</h4>
-                    <p>Every listed vehicle is physically inspected and backed by full comprehensive insurance.</p>
-                  </div>
+              <div className="renter-metrics-grid">
+                <div className="metric-cell">
+                  <strong>50+</strong>
+                  <span>Curated Vehicles</span>
                 </div>
-
-                <div className="perk-item">
-                  <div className="perk-icon-wrap">
-                    <Zap size={20} className="gold" />
-                  </div>
-                  <div>
-                    <h4>Express Doorstep Delivery Available</h4>
-                    <p>Get your vehicle delivered directly to your home, office, or airport terminal on request.</p>
-                  </div>
+                <div className="metric-cell">
+                  <strong>4.9 ★</strong>
+                  <span>Renter Satisfaction</span>
                 </div>
-
-                <div className="perk-item">
-                  <div className="perk-icon-wrap">
-                    <Headphones size={20} className="gold" />
-                  </div>
-                  <div>
-                    <h4>Dedicated Concierge & Roadside Support</h4>
-                    <p>Direct 24/7 hotline with assistance ready anywhere across Pakistan.</p>
-                  </div>
+                <div className="metric-cell">
+                  <strong>0 Hidden Fees</strong>
+                  <span>Fixed Daily Rates</span>
                 </div>
-
-                <div className="perk-item">
-                  <div className="perk-icon-wrap">
-                    <BadgeCheck size={20} className="gold" />
-                  </div>
-                  <div>
-                    <h4>Transparent Security Deposit Refunds</h4>
-                    <p>Prompt deposit releases immediately upon return inspection. No hidden deductibles.</p>
-                  </div>
+                <div className="metric-cell">
+                  <strong>Instant</strong>
+                  <span>Key Handover</span>
                 </div>
-              </div>
-
-              <div className="renter-host-redirect">
-                <span>Have a car you want to list and earn from?</span>
-                <Link href="/host" className="host-link">
-                  Go to Host / Lister Portal →
-                </Link>
               </div>
             </div>
 
@@ -324,23 +266,12 @@ function RenterPortalContent() {
                     </div>
 
                     <div className="form-row-2">
-                      <div className="form-field">
-                        <label htmlFor="renter-city">Your City *</label>
-                        <select
-                          id="renter-city"
-                          value={city}
-                          onChange={(e) => setCity(e.target.value)}
-                          className="renter-select"
-                          data-testid="select-renter-city"
-                        >
-                          <option value="Lahore">Lahore</option>
-                          <option value="Karachi">Karachi</option>
-                          <option value="Islamabad">Islamabad</option>
-                          <option value="Rawalpindi">Rawalpindi</option>
-                          <option value="Faisalabad">Faisalabad</option>
-                          <option value="Multan">Multan</option>
-                        </select>
-                      </div>
+                      <AutoLocationField
+                        id="renter-city"
+                        value={city}
+                        onChange={setCity}
+                        label="Your City"
+                      />
                       <div className="form-field">
                         <label htmlFor="renter-phone">Phone / Mobile *</label>
                         <input
@@ -475,103 +406,91 @@ function RenterPortalContent() {
       <style jsx>{`
         .renter-portal-page {
           background: #09090b;
-          min-height: 80vh;
-          padding-bottom: 5rem;
+          min-height: 85vh;
+          padding: 2.5rem 0 5rem;
         }
-        .renter-hero-banner {
-          position: relative;
-          padding: 5rem 1rem 3.5rem;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-          background: radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.06) 0%, transparent 60%);
-          overflow: hidden;
-        }
-        .renter-hero-content {
-          max-width: 900px;
+        .renter-auth-section {
+          max-width: 1200px;
           margin: 0 auto;
-          text-align: center;
+          padding: 0 1.25rem;
+        }
+        .renter-auth-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 3.5rem;
+          align-items: start;
+        }
+        .renter-info-card {
+          display: flex;
+          flex-direction: column;
         }
         .renter-pill-badge {
           display: inline-flex;
           align-items: center;
           gap: 0.5rem;
-          background: rgba(255, 255, 255, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.16);
-          color: #ffffff;
+          background: rgba(201, 162, 39, 0.12);
+          border: 1px solid rgba(201, 162, 39, 0.35);
+          color: var(--gold, #c9a227);
           padding: 0.4rem 1rem;
           border-radius: 999px;
           font-size: 0.75rem;
           font-weight: 700;
           letter-spacing: 0.08em;
           margin-bottom: 1.25rem;
+          align-self: flex-start;
         }
-        .renter-hero-title {
-          font-size: 2.75rem;
+        .renter-headline {
+          font-size: clamp(1.85rem, 3.5vw, 2.75rem);
           font-weight: 800;
           line-height: 1.15;
           color: #ffffff;
-          margin-bottom: 1rem;
+          margin: 0 0 1rem;
           letter-spacing: -0.02em;
         }
-        .renter-hero-desc {
-          color: rgba(255, 255, 255, 0.7);
-          font-size: 1.05rem;
-          line-height: 1.6;
-          max-width: 680px;
-          margin: 0 auto 2.5rem;
+        .gold-text {
+          color: var(--gold, #c9a227);
         }
-        .renter-metrics-strip {
+        .renter-lead {
+          color: rgba(255, 255, 255, 0.7);
+          font-size: 1rem;
+          line-height: 1.6;
+          margin: 0 0 1.75rem;
+        }
+        .renter-metrics-grid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 1rem;
-          background: rgba(18, 18, 22, 0.75);
-          backdrop-filter: blur(12px);
+          grid-template-columns: repeat(2, 1fr);
+          gap: 0.85rem;
+          background: rgba(18, 18, 22, 0.85);
           border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 12px;
           padding: 1.25rem;
+          margin-bottom: 2rem;
         }
         .metric-cell {
           display: flex;
           flex-direction: column;
-          gap: 0.25rem;
+          gap: 0.2rem;
         }
         .metric-cell strong {
-          font-size: 1.45rem;
+          font-size: 1.35rem;
           color: var(--gold, #c9a227);
           font-weight: 800;
         }
         .metric-cell span {
-          font-size: 0.78rem;
+          font-size: 0.75rem;
           color: rgba(255, 255, 255, 0.6);
           text-transform: uppercase;
           letter-spacing: 0.04em;
         }
-        .renter-auth-section {
-          padding-top: 3.5rem;
-        }
-        .renter-auth-grid {
-          display: grid;
-          grid-template-columns: 1.1fr 1fr;
-          gap: 3rem;
-          align-items: flex-start;
-        }
-        .renter-info-card {
-          padding-right: 1.5rem;
-        }
-        .renter-info-card h2 {
-          font-size: 2rem;
-          color: #ffffff;
-          margin: 0.5rem 0 0.8rem;
-          font-weight: 800;
-        }
         .renter-perks-list {
           display: flex;
           flex-direction: column;
-          gap: 1.4rem;
-          margin: 2rem 0;
+          gap: 1.25rem;
+          margin-bottom: 2rem;
         }
         .perk-item {
           display: flex;
-          gap: 1rem;
+          gap: 0.9rem;
           align-items: flex-start;
         }
         .perk-icon-wrap {
@@ -583,13 +502,13 @@ function RenterPortalContent() {
           flex-shrink: 0;
         }
         .perk-item h4 {
-          font-size: 1rem;
+          font-size: 0.95rem;
           color: #fff;
           margin: 0 0 0.25rem;
           font-weight: 700;
         }
         .perk-item p {
-          font-size: 0.88rem;
+          font-size: 0.85rem;
           color: rgba(255, 255, 255, 0.65);
           line-height: 1.45;
           margin: 0;
@@ -600,7 +519,7 @@ function RenterPortalContent() {
           gap: 0.75rem;
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid rgba(255, 255, 255, 0.07);
-          padding: 1rem 1.25rem;
+          padding: 0.9rem 1.25rem;
           border-radius: 10px;
           font-size: 0.88rem;
           color: rgba(255, 255, 255, 0.7);
@@ -610,12 +529,17 @@ function RenterPortalContent() {
           font-weight: 600;
           text-decoration: underline;
         }
+        .renter-form-wrapper {
+          width: 100%;
+        }
         .renter-form-card {
           background: #141418;
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          border: 1px solid rgba(201, 162, 39, 0.25);
           border-radius: 16px;
           padding: 2rem;
           box-shadow: 0 20px 45px rgba(0, 0, 0, 0.5);
+          width: 100%;
+          box-sizing: border-box;
         }
         .renter-tab-switch {
           display: grid;
@@ -626,27 +550,30 @@ function RenterPortalContent() {
           border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.08);
           margin-bottom: 1.75rem;
+          width: 100%;
+          box-sizing: border-box;
         }
         .renter-tab-btn {
           display: flex;
           align-items: center;
           justify-content: center;
           gap: 0.5rem;
-          padding: 0.7rem 0.5rem;
+          padding: 0.75rem 0.5rem;
           background: transparent;
           border: none;
-          color: rgba(255, 255, 255, 0.6);
+          color: rgba(255, 255, 255, 0.65);
           font-size: 0.85rem;
           font-weight: 600;
           border-radius: 7px;
           cursor: pointer;
           transition: all 0.2s ease;
+          width: 100%;
         }
         .renter-tab-btn.active {
-          background: #ffffff;
+          background: var(--gold, #c9a227);
           color: #0b0b0e;
           font-weight: 700;
-          box-shadow: 0 4px 12px rgba(255, 255, 255, 0.18);
+          box-shadow: 0 4px 12px rgba(201, 162, 39, 0.25);
         }
         .form-header {
           margin-bottom: 1.5rem;
@@ -660,7 +587,7 @@ function RenterPortalContent() {
           margin-bottom: 0.35rem;
         }
         .form-header h3 {
-          font-size: 1.4rem;
+          font-size: 1.35rem;
           color: #fff;
           margin: 0 0 0.35rem;
           font-weight: 700;
@@ -674,17 +601,20 @@ function RenterPortalContent() {
         .portal-form {
           display: flex;
           flex-direction: column;
-          gap: 1.1rem;
+          gap: 1.15rem;
+          width: 100%;
         }
         .form-row-2 {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 1rem;
+          width: 100%;
         }
         .form-field {
           display: flex;
           flex-direction: column;
           gap: 0.4rem;
+          width: 100%;
         }
         .form-field label {
           font-size: 0.82rem;
@@ -693,21 +623,26 @@ function RenterPortalContent() {
         }
         .form-field input,
         .renter-select {
-          padding: 0.75rem 0.9rem;
+          width: 100%;
+          box-sizing: border-box;
+          padding: 0.75rem 0.95rem;
+          min-height: 46px;
           background: rgba(255, 255, 255, 0.05);
           border: 1px solid rgba(255, 255, 255, 0.12);
           border-radius: 8px;
           color: #fff;
           font-size: 0.9rem;
           outline: none;
-          transition: border-color 0.2s;
+          transition: border-color 0.2s, box-shadow 0.2s;
         }
         .form-field input:focus,
         .renter-select:focus {
-          border-color: #ffffff;
+          border-color: var(--gold, #c9a227);
+          box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.12);
         }
         .renter-select {
           color-scheme: dark;
+          cursor: pointer;
         }
         .renter-select option {
           background-color: #141418;
@@ -716,9 +651,13 @@ function RenterPortalContent() {
         .btn-block {
           width: 100%;
           justify-content: center;
-          padding: 0.85rem 1.25rem;
+          min-height: 48px;
           font-size: 0.95rem;
+          font-weight: 700;
           margin-top: 0.5rem;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
         }
         .terms-privacy-note {
           font-size: 0.78rem;
@@ -785,7 +724,9 @@ function RenterPortalContent() {
           margin-top: 1rem;
           display: flex;
           justify-content: center;
+          align-items: center;
           gap: 0.4rem;
+          flex-wrap: wrap;
         }
         .text-gold-btn {
           background: transparent;
@@ -796,22 +737,40 @@ function RenterPortalContent() {
           text-decoration: underline;
         }
 
-        @media (max-width: 900px) {
-          .renter-hero-title {
-            font-size: 2rem;
-          }
-          .renter-metrics-strip {
-            grid-template-columns: repeat(2, 1fr);
-          }
+        /* ─── RESPONSIVE BREAKPOINTS ─── */
+        @media (max-width: 1024px) {
           .renter-auth-grid {
             grid-template-columns: 1fr;
-            gap: 2rem;
+            gap: 2.5rem;
           }
-          .renter-info-card {
-            padding-right: 0;
+        }
+
+        @media (max-width: 640px) {
+          .renter-portal-page {
+            padding: 1.5rem 0 3.5rem;
+          }
+          .renter-auth-section {
+            padding: 0 0.85rem;
+          }
+          .renter-form-card {
+            padding: 1.35rem 1rem;
+            border-radius: 12px;
           }
           .form-row-2 {
             grid-template-columns: 1fr;
+            gap: 1.15rem;
+          }
+          .renter-metrics-grid {
+            grid-template-columns: 1fr 1fr;
+            padding: 1rem;
+            gap: 0.6rem;
+          }
+          .metric-cell strong {
+            font-size: 1.2rem;
+          }
+          .renter-tab-btn {
+            font-size: 0.8rem;
+            padding: 0.65rem 0.35rem;
           }
         }
       `}</style>

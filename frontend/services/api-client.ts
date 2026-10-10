@@ -1,5 +1,12 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? '/api' : 'http://localhost:3000/api');
+const getBaseUrl = () => {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  // If envUrl is undefined, empty, or points to local Express port 5001 (which may not be running),
+  // seamlessly use internal Next.js relative /api route so browser fetches always succeed!
+  if (!envUrl || envUrl.includes('localhost:5001')) {
+    return typeof window !== 'undefined' ? '/api' : 'http://localhost:3000/api';
+  }
+  return envUrl;
+};
 
 export class ApiError extends Error {
   code?: string;
@@ -23,19 +30,41 @@ export async function apiClient<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const baseUrl = getBaseUrl();
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${baseUrl}${cleanEndpoint}`;
 
   const defaultHeaders: HeadersInit = {
     'Content-Type': 'application/json',
   };
 
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...defaultHeaders,
-      ...options.headers,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        ...defaultHeaders,
+        ...options.headers,
+      },
+    });
+  } catch (fetchErr) {
+    // If the configured URL failed (e.g. port 5001 connection refused), fallback to internal Next.js /api
+    if (!url.startsWith('/api') && typeof window !== 'undefined') {
+      try {
+        response = await fetch(`/api${cleanEndpoint}`, {
+          ...options,
+          headers: {
+            ...defaultHeaders,
+            ...options.headers,
+          },
+        });
+      } catch {
+        throw fetchErr;
+      }
+    } else {
+      throw fetchErr;
+    }
+  }
 
   let data: any = null;
   try {
