@@ -36,7 +36,6 @@ const CATEGORIES = [
   { name: 'Electric', icon: Fuel },
 ] as const;
 
-const CITIES = ['All Cities', 'Lahore', 'Karachi', 'Islamabad', 'Rawalpindi'] as const;
 const TRANSMISSIONS = ['All Transmissions', 'Automatic', 'Manual'] as const;
 const AVAILABILITIES = [
   { label: 'All Fleet', value: 'all' },
@@ -48,7 +47,6 @@ export default function AllListingsPage() {
   const [vehiclesList, setVehiclesList] = useState<Vehicle[]>(() => allCars());
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [selectedCity, setSelectedCity] = useState<string>('All Cities');
   const [selectedTransmission, setSelectedTransmission] = useState<string>('All Transmissions');
   const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'booked'>('all');
   const [maxPrice, setMaxPrice] = useState<number>(350);
@@ -85,11 +83,6 @@ export default function AllListingsPage() {
 
         // Category
         if (selectedCategory !== 'All' && vehicle.category.toLowerCase() !== selectedCategory.toLowerCase()) {
-          return false;
-        }
-
-        // City
-        if (selectedCity !== 'All Cities' && !vehicle.location.toLowerCase().includes(selectedCity.toLowerCase())) {
           return false;
         }
 
@@ -139,7 +132,6 @@ export default function AllListingsPage() {
     vehiclesList,
     searchQuery,
     selectedCategory,
-    selectedCity,
     selectedTransmission,
     availabilityFilter,
     maxPrice,
@@ -152,7 +144,6 @@ export default function AllListingsPage() {
   const activeFilterCount =
     (searchQuery ? 1 : 0) +
     (selectedCategory !== 'All' ? 1 : 0) +
-    (selectedCity !== 'All Cities' ? 1 : 0) +
     (selectedTransmission !== 'All Transmissions' ? 1 : 0) +
     (availabilityFilter !== 'all' ? 1 : 0) +
     (maxPrice < 350 ? 1 : 0);
@@ -160,7 +151,6 @@ export default function AllListingsPage() {
   const resetFilters = () => {
     setSearchQuery('');
     setSelectedCategory('All');
-    setSelectedCity('All Cities');
     setSelectedTransmission('All Transmissions');
     setAvailabilityFilter('all');
     setMaxPrice(350);
@@ -210,7 +200,6 @@ export default function AllListingsPage() {
                 className="quick-tag"
                 onClick={() => {
                   setSelectedCategory('SUV');
-                  setSelectedCity('All Cities');
                 }}
               >
                 7-Seater SUVs
@@ -220,10 +209,9 @@ export default function AllListingsPage() {
                 className="quick-tag"
                 onClick={() => {
                   setSelectedCategory('Sedan');
-                  setSelectedCity('Lahore');
                 }}
               >
-                Executive Sedans (Lahore)
+                Executive Sedans
               </button>
               <button
                 type="button"
@@ -415,41 +403,6 @@ export default function AllListingsPage() {
                   </small>
                 </div>
 
-                {/* 4. Location / City */}
-                <div className="filter-block">
-                  <label htmlFor="city-select" className="filter-block-label">
-                    <MapPin size={14} /> City & Region
-                  </label>
-                  <div className="custom-select-wrapper">
-                    <select
-                      id="city-select"
-                      value={selectedCity}
-                      onChange={(e) => setSelectedCity(e.target.value)}
-                      className="dark-native-select"
-                      data-testid="select-city-dropdown"
-                    >
-                      {CITIES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {/* Quick City Chip Shortcuts */}
-                  <div className="city-chips-grid">
-                    {CITIES.map((city) => (
-                      <button
-                        key={city}
-                        type="button"
-                        onClick={() => setSelectedCity(city)}
-                        className={`city-chip ${selectedCity === city ? 'is-active' : ''}`}
-                      >
-                        {city}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 {/* 4. Transmission Toggle */}
                 <div className="filter-block">
                   <span className="filter-block-label">
@@ -575,9 +528,6 @@ export default function AllListingsPage() {
                   <h3>
                     Showing <strong>{filteredVehicles.length}</strong> of {vehiclesList.length} vehicles
                   </h3>
-                  {selectedCity !== 'All Cities' && (
-                    <span className="active-city-indicator">in {selectedCity}, Pakistan</span>
-                  )}
                 </div>
 
                 <div className="sort-selector-wrap">
@@ -610,11 +560,6 @@ export default function AllListingsPage() {
                   {selectedCategory !== 'All' && (
                     <button type="button" onClick={() => setSelectedCategory('All')} className="active-chip">
                       Category: {selectedCategory} <X size={12} />
-                    </button>
-                  )}
-                  {selectedCity !== 'All Cities' && (
-                    <button type="button" onClick={() => setSelectedCity('All Cities')} className="active-chip">
-                      City: {selectedCity} <X size={12} />
                     </button>
                   )}
                   {selectedTransmission !== 'All Transmissions' && (

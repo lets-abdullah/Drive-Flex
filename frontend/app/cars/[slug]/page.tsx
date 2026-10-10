@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ChevronLeft, MapPin, ShieldCheck, Star, Users } from 'lucide-react';
+import { ChevronLeft, MapPin, ShieldCheck, Star, Users, Loader2 } from 'lucide-react';
 import { Layout } from '@/components/layout';
 import { VehicleCard } from '@/components/vehicles/vehicle-card';
 import { OwnerIdentity } from '@/components/owners/owner-identity';
@@ -11,14 +11,73 @@ import { BookingWidget } from '@/components/vehicles/booking-widget';
 import { findVehicle, allCars } from '@/data/vehicles';
 import { getPublishedVehicles } from '@/utils/helpers';
 import { useBookingStatus } from '@/hooks/use-booking-status';
+import type { Vehicle } from '@/types';
 
 export default function CarDetailPage() {
   const params = useParams();
-  const slug = typeof params?.slug === 'string' ? decodeURIComponent(params.slug) : '';
-  const vehicle = findVehicle(slug) || getPublishedVehicles().find((item) => item.slug === slug);
+  const rawSlug = typeof params?.slug === 'string' ? decodeURIComponent(params.slug) : '';
+  const [vehicle, setVehicle] = useState<Vehicle | null>(() => {
+    if (!rawSlug) return null;
+    return (
+      findVehicle(rawSlug) ||
+      getPublishedVehicles().find(
+        (item) =>
+          item.slug?.toLowerCase() === rawSlug.toLowerCase() ||
+          item.id?.toLowerCase() === rawSlug.toLowerCase()
+      ) ||
+      null
+    );
+  });
+  const [loading, setLoading] = useState<boolean>(!vehicle);
   const [activeImage, setActiveImage] = useState(0);
+
+  useEffect(() => {
+    if (!rawSlug) return;
+
+    const localMatch =
+      findVehicle(rawSlug) ||
+      getPublishedVehicles().find(
+        (item) =>
+          item.slug?.toLowerCase() === rawSlug.toLowerCase() ||
+          item.id?.toLowerCase() === rawSlug.toLowerCase()
+      );
+
+    if (localMatch) {
+      setVehicle(localMatch);
+      setLoading(false);
+    }
+
+    // Always attempt live fetch from API to ensure DB cars or updated status are fresh
+    fetch(`/api/vehicles/${encodeURIComponent(rawSlug)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.data) {
+          setVehicle(json.data);
+        }
+      })
+      .catch((err) => {
+        console.warn('Vehicle detail live API fetch notice:', err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [rawSlug]);
+
   const { isVehicleBooked } = useBookingStatus(vehicle || undefined);
   const isBooked = vehicle ? isVehicleBooked(vehicle.id) : false;
+
+  if (loading) {
+    return (
+      <Layout>
+        <main className="not-found" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ textAlign: 'center' }}>
+            <Loader2 size={32} className="spin-gold" style={{ margin: '0 auto 16px', animation: 'spin 1s linear infinite' }} />
+            <div className="eyebrow">Locating vehicle...</div>
+          </div>
+        </main>
+      </Layout>
+    );
+  }
 
   if (!vehicle) {
     return (
@@ -28,7 +87,7 @@ export default function CarDetailPage() {
             <div className="eyebrow">No vehicle here</div>
             <h1>That drive took a detour.</h1>
             <p className="muted">The vehicle may have moved, but there are more good choices waiting.</p>
-            <Link className="btn btn-primary" href="/" data-testid="link-detail-not-found">Browse fleet</Link>
+            <Link className="btn btn-primary" href="/cars" data-testid="link-detail-not-found">Browse fleet</Link>
           </div>
         </main>
       </Layout>

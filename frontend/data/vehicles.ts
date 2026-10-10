@@ -5,7 +5,16 @@ export type { Vehicle, RentalPeriod };
 function getPublishedVehiclesLocal(): Vehicle[] {
   if (typeof window === 'undefined') return [];
   try {
-    return JSON.parse(localStorage.getItem('driveflex-demo-published-vehicles') || '[]') as Vehicle[];
+    const list1 = JSON.parse(localStorage.getItem('driveflex-demo-published-vehicles') || '[]');
+    const list2 = JSON.parse(localStorage.getItem('driveflex-host-cars') || '[]');
+    const combined = [...(Array.isArray(list1) ? list1 : []), ...(Array.isArray(list2) ? list2 : [])];
+    const seen = new Set<string>();
+    return combined.filter((item: Vehicle) => {
+      const key = item.id || item.slug;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   } catch {
     return [];
   }
@@ -49,7 +58,16 @@ export const vehicles: Vehicle[] = [
   car('v10', 'kia-sportage-awd', 'Kia', 'Sportage AWD', 'SUV', 'Karachi, Pakistan', 110, 4.91, 62, 5, 'Automatic', 'Gasoline', 'https://images.unsplash.com/photo-1583121274602-3e2820c69888?auto=format&fit=crop&w=1600&q=80', 'Modern luxury crossover SUV featuring a panoramic sunroof, all-wheel drive stability, wireless charging, and plush leather seats.', ['2026-10-25'], undefined, 'owner-hamza', [], 'available'),
 ];
 
-export const findVehicle = (slug: string) => vehicles.find((vehicle) => vehicle.slug === slug);
+export const findVehicle = (slugOrId: string): Vehicle | undefined => {
+  if (!slugOrId) return undefined;
+  const decoded = decodeURIComponent(slugOrId).toLowerCase().trim();
+  return allCars().find(
+    (vehicle) =>
+      vehicle.slug?.toLowerCase() === decoded ||
+      vehicle.id?.toLowerCase() === decoded ||
+      `${vehicle.brand}-${vehicle.model}`.toLowerCase().replace(/[^a-z0-9]+/g, '-') === decoded
+  );
+};
 
 export function allCars(): Vehicle[] {
   return [...vehicles, ...getPublishedVehiclesLocal()];

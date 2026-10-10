@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { MapPin, Star, Users } from 'lucide-react';
 import type { Vehicle } from '@/types';
 import { formatMoney } from '@/utils/helpers';
@@ -11,14 +12,29 @@ import { FavoriteButton } from '@/components/favorite-button';
 import { OwnerIdentity } from '@/components/owners/owner-identity';
 
 export function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
+  const router = useRouter();
   const { favorites, toggle } = useFavorites();
   const { isVehicleBooked } = useBookingStatus(vehicle);
   const { isFilterActive, getDistanceToVehicle } = useLocationFilter();
   const booked = isVehicleBooked(vehicle.id);
   const distance = isFilterActive ? getDistanceToVehicle(vehicle) : null;
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    // Do not trigger card navigation if clicking favorite button or other buttons/links
+    if (target.closest('button') || target.closest('a')) {
+      return;
+    }
+    router.push(`/cars/${vehicle.slug}`);
+  };
+
   return (
-    <article className={`vehicle-card ${booked ? 'is-card-booked' : ''}`} data-testid={`card-vehicle-${vehicle.id}`}>
+    <article
+      className={`vehicle-card ${booked ? 'is-card-booked' : ''}`}
+      data-testid={`card-vehicle-${vehicle.id}`}
+      onClick={handleCardClick}
+      style={{ cursor: 'pointer' }}
+    >
       <div className="vehicle-image">
         <img src={vehicle.image} alt={`${vehicle.brand} ${vehicle.model}`} loading="lazy" />
         {vehicle.category === 'Luxury' && <span className="vehicle-badge">Premium</span>}
