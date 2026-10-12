@@ -166,6 +166,39 @@ export default function CheckoutScreen() {
     }
   };
 
+  // Requirement 2: Disable Bookings - completely prevent Hosts from booking cars
+  if (session?.role === 'host') {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, padding: 24, justifyContent: 'center', alignItems: 'center' }}>
+        <View
+          style={{
+            width: 72,
+            height: 72,
+            borderRadius: 36,
+            backgroundColor: 'rgba(214, 31, 60, 0.12)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 18,
+          }}
+        >
+          <Feather name="slash" size={32} color={colors.destructive} />
+        </View>
+        <Text style={{ fontSize: 20, fontWeight: '800', color: colors.foreground, textAlign: 'center', marginBottom: 8 }}>
+          Booking Restricted for Hosts
+        </Text>
+        <Text style={{ fontSize: 14, color: colors.mutedForeground, textAlign: 'center', lineHeight: 21, marginBottom: 24, maxWidth: 320 }}>
+          Your account is registered as a Host. Host accounts are authorized for fleet management only. A Host cannot book a car.
+        </Text>
+        <Pressable
+          onPress={() => router.replace('/(tabs)')}
+          style={{ backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 13, borderRadius: 14 }}
+        >
+          <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>Return to Home</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   if (!vehicle) {
     return (
       <Page>

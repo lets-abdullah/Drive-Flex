@@ -11,11 +11,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import Svg, { Path, Rect } from 'react-native-svg';
 import { Page } from '@/components/Marketplace';
 import { BrandLogo, POPULAR_BRANDS } from '@/components/BrandLogos';
 import { VehicleCardFeatured } from '@/components/CardDesigns';
-import { type Vehicle } from '@/data/catalog';
 import { useDriveFlex } from '@/context/AppContext';
 import { useLocationFilter } from '@/context/LocationContext';
 import { useColors } from '@/hooks/useColors';
@@ -75,30 +74,24 @@ export default function HomeScreen() {
   const [heroSlideIndex, setHeroSlideIndex] = useState(0);
   const [heroCardWidth, setHeroCardWidth] = useState(SCREEN_WIDTH - 40);
   const heroScrollRef = React.useRef<ScrollView>(null);
-  const activeSlide = HERO_SLIDES[heroSlideIndex] || HERO_SLIDES[0];
 
-  // Curated featured cars for the horizontal carousel
+  // Curated featured cars for the horizontal carousel (1 car per brand in the current city)
   const featuredCars = useMemo(() => {
-    const prioritySlugs = [
-      'mercedes-benz-c-class',
-      'bmw-3-series',
-      'tesla-model-3',
-      'audi-a4',
-      'mercedes-benz-a-class',
-      'bmw-i7-master',
-    ];
-
-    const sorted = [...vehicles].sort((a, b) => {
-      const idxA = prioritySlugs.indexOf(a.slug);
-      const idxB = prioritySlugs.indexOf(b.slug);
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      if (idxA !== -1) return -1;
-      if (idxB !== -1) return 1;
-      return b.rating - a.rating;
+    const activeVehicles = vehicles.filter((v) => !v.isDelisted && v.status !== 'maintenance');
+    const cityVehicles = activeVehicles.filter(
+      (v) =>
+        (v.city_name || v.location).toLowerCase().includes(currentCity.name.toLowerCase())
+    );
+    const source = cityVehicles.length > 0 ? cityVehicles : activeVehicles;
+    const seenBrands = new Set<string>();
+    const onePerBrand = source.filter((v) => {
+      const bKey = v.brand.trim().toLowerCase();
+      if (seenBrands.has(bKey)) return false;
+      seenBrands.add(bKey);
+      return true;
     });
-
-    return sorted;
-  }, [vehicles]);
+    return onePerBrand;
+  }, [vehicles, currentCity.name]);
 
   const handleBrandSelect = (brandQuery: string) => {
     router.push({
@@ -114,7 +107,7 @@ export default function HomeScreen() {
 
   return (
     <Page tabbed>
-      {/* ─── 1. TOP HEADER (DriveFlex Brand Title + Notification Bell + Profile Avatar) ─── */}
+      {/* ─── 1. TOP HEADER (DriveFlex Brand Title + Theme Toggle + Profile Avatar) ─── */}
       <View style={styles.topHeader}>
         <View style={styles.brandTitleWrap}>
           <Text style={[styles.brandTitle, { color: colors.foreground }]}>DriveFlex</Text>
@@ -151,7 +144,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* ─── 2. HERO BANNER (Image as card background with readable text overlay & dots) ─── */}
+      {/* ─── 2. HERO BANNER (Promotional Slides) ─── */}
       <View
         onLayout={(e) => {
           const w = e.nativeEvent.layout.width;
@@ -167,7 +160,6 @@ export default function HomeScreen() {
           },
         ]}
       >
-        {/* Horizontal Swipeable Carousel (3 distinct designs one by one) */}
         <ScrollView
           ref={heroScrollRef}
           horizontal
@@ -188,7 +180,6 @@ export default function HomeScreen() {
         >
           {HERO_SLIDES.map((slide) => (
             <View key={slide.id} style={[styles.heroSlideCard, { width: heroCardWidth }]}>
-              {/* Luxury Cars Background Image covering full card */}
               <Image
                 source={slide.image}
                 contentFit="cover"
@@ -196,8 +187,6 @@ export default function HomeScreen() {
                 style={StyleSheet.absoluteFill}
                 transition={200}
               />
-
-              {/* Theme-Aware Gradient Overlay for flawless left-aligned text legibility */}
               <LinearGradient
                 colors={
                   colors.isDark
@@ -219,13 +208,10 @@ export default function HomeScreen() {
                 locations={[0, 0.35, 0.50, 0.70, 0.88]}
                 start={{ x: 0, y: 0.5 }}
                 end={{ x: 1, y: 0.5 }}
-                style={StyleSheet.absoluteFill}
-                pointerEvents="none"
+                style={[StyleSheet.absoluteFill, { pointerEvents: 'none' } as any]}
               />
 
-              {/* Left-Aligned Foreground Content */}
               <View style={styles.heroForegroundContent}>
-                {/* Hero Eyebrow Pill */}
                 <View
                   style={[
                     styles.heroEyebrowPill,
@@ -239,33 +225,19 @@ export default function HomeScreen() {
                     },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.heroEyebrow,
-                      { color: colors.primary },
-                    ]}
-                  >
+                  <Text style={[styles.heroEyebrow, { color: colors.primary }]}>
                     {slide.eyebrow}
                   </Text>
                 </View>
 
-                {/* Hero Headline */}
-                <Text
-                  numberOfLines={2}
-                  style={[styles.heroHeadline, { color: colors.foreground }]}
-                >
+                <Text numberOfLines={2} style={[styles.heroHeadline, { color: colors.foreground }]}>
                   {slide.headline}
                 </Text>
 
-                {/* Hero Subtitle */}
-                <Text
-                  numberOfLines={2}
-                  style={[styles.heroSubtitle, { color: colors.mutedForeground }]}
-                >
+                <Text numberOfLines={2} style={[styles.heroSubtitle, { color: colors.mutedForeground }]}>
                   {slide.subtitle}
                 </Text>
 
-                {/* Explore CTA Button */}
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={slide.ctaText}
@@ -277,20 +249,14 @@ export default function HomeScreen() {
                   ]}
                 >
                   <Text style={styles.heroCtaBtnText}>{slide.ctaText}</Text>
-                  <Feather
-                    name="arrow-right"
-                    size={14}
-                    color="#FFFFFF"
-                    style={{ marginLeft: 5 }}
-                  />
+                  <Feather name="arrow-right" size={14} color="#FFFFFF" style={{ marginLeft: 5 }} />
                 </Pressable>
               </View>
             </View>
           ))}
         </ScrollView>
 
-        {/* Carousel indicator dots (• • •) anchored at bottom-right corner */}
-        <View style={styles.heroDotsRow} pointerEvents="box-none">
+        <View style={[styles.heroDotsRow, { pointerEvents: 'box-none' } as any]}>
           {HERO_SLIDES.map((_, idx) => (
             <Pressable
               key={idx}
@@ -304,8 +270,7 @@ export default function HomeScreen() {
               style={[
                 styles.heroDot,
                 {
-                  backgroundColor:
-                    idx === heroSlideIndex ? colors.primary : colors.mutedForeground,
+                  backgroundColor: idx === heroSlideIndex ? colors.primary : colors.mutedForeground,
                   opacity: idx === heroSlideIndex ? 1 : 0.35,
                   width: idx === heroSlideIndex ? 18 : 6,
                 },
@@ -315,17 +280,14 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* ─── 3. PROXIMITY QUICK ACTION ("Premium rides, closer to you") ─── */}
+      {/* ─── 3. PROXIMITY QUICK ACTION ─── */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Find premium rides closer to you"
         onPress={() => router.push('/(tabs)/search')}
         style={({ pressed }) => [
           styles.proximityCard,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          },
+          { backgroundColor: colors.card, borderColor: colors.border },
           pressed && { opacity: 0.94 },
         ]}
       >
@@ -350,7 +312,7 @@ export default function HomeScreen() {
         <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
       </Pressable>
 
-      {/* ─── 4. EXPLORE BY BRAND SECTION ─── */}
+      {/* ─── 4. EXPLORE BY BRAND ─── */}
       <View style={styles.sectionHeaderRow}>
         <View>
           <Text style={[styles.sectionHeading, { color: colors.foreground }]}>
@@ -370,7 +332,6 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      {/* Circular Brand Badges Horizontal Strip */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -390,10 +351,7 @@ export default function HomeScreen() {
             <View
               style={[
                 styles.brandCircle,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                },
+                { backgroundColor: colors.card, borderColor: colors.border },
               ]}
             >
               <BrandLogo brand={item.name} size={30} color={colors.foreground} />
@@ -405,7 +363,7 @@ export default function HomeScreen() {
         ))}
       </ScrollView>
 
-      {/* ─── 5. FEATURED CARS SECTION (Horizontal Carousel) ─── */}
+      {/* ─── 5. FEATURED CARS SECTION ─── */}
       <View style={[styles.sectionHeaderRow, { marginTop: 24 }]}>
         <View>
           <Text style={[styles.sectionHeading, { color: colors.foreground }]}>
@@ -425,7 +383,6 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      {/* Horizontal Carousel of Featured Car Cards */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -442,21 +399,17 @@ export default function HomeScreen() {
         ))}
       </ScrollView>
 
-      {/* ─── 6. "FIND CARS NEAR YOU" MAP TEASER CARD (Maps, GPS, Radius) ─── */}
+      {/* ─── 6. FIND CARS NEAR YOU MAP TEASER CARD ─── */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Discover available cars near you on map"
         onPress={() => router.push('/map')}
         style={({ pressed }) => [
           styles.mapTeaserCard,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          },
+          { backgroundColor: colors.card, borderColor: colors.border },
           pressed && { opacity: 0.94 },
         ]}
       >
-        {/* Subtle SVG Map Graphic Background */}
         <Svg
           width="100%"
           height="100%"
@@ -471,16 +424,8 @@ export default function HomeScreen() {
             height="76"
             fill={colors.isDark ? '#0C121A' : '#EFF5FA'}
           />
-          {/* Subtle street lines */}
           <Path
-            d="
-              M-10 25 Q100 20 220 30 T350 25
-              M-10 50 Q160 45 350 55
-              M40 0 L40 76
-              M120 0 L120 76
-              M200 0 L200 76
-              M280 0 L280 76
-            "
+            d="M-10 25 Q100 20 220 30 T350 25 M-10 50 Q160 45 350 55 M40 0 L40 76 M120 0 L120 76 M200 0 L200 76 M280 0 L280 76"
             stroke={colors.isDark ? '#162433' : '#DDE8F0'}
             strokeWidth="1.5"
             fill="none"
@@ -494,21 +439,13 @@ export default function HomeScreen() {
         </Svg>
 
         <View style={styles.mapTeaserContent}>
-          {/* Pulsing Crimson Pin Circle */}
           <View
             style={[
               styles.mapTeaserPinWrap,
-              {
-                backgroundColor: colors.isDark ? 'rgba(177, 18, 38, 0.25)' : '#FDE8EB',
-              },
+              { backgroundColor: colors.isDark ? 'rgba(177, 18, 38, 0.25)' : '#FDE8EB' },
             ]}
           >
-            <View
-              style={[
-                styles.mapTeaserPinInner,
-                { backgroundColor: colors.primary },
-              ]}
-            >
+            <View style={[styles.mapTeaserPinInner, { backgroundColor: colors.primary }]}>
               <Feather name="navigation" size={13} color="#FFFFFF" />
             </View>
           </View>
@@ -526,9 +463,8 @@ export default function HomeScreen() {
         </View>
       </Pressable>
 
-      {/* ─── 7. DARK PROMO CARD ("Drive the extraordinary") ─── */}
+      {/* ─── 7. BOTTOM PROMO CARD ─── */}
       <View style={styles.promoCardContainer}>
-        {/* Deep dark luxury styling */}
         <View style={styles.promoDarkCard}>
           <View style={styles.promoLeftContent}>
             <Text style={styles.promoTitle}>Drive the extraordinary</Text>
@@ -550,7 +486,6 @@ export default function HomeScreen() {
             </Pressable>
           </View>
 
-          {/* Car Headlights Front Graphic */}
           <View style={styles.promoRightVisual}>
             <Image
               source={{

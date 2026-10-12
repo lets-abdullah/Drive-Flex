@@ -28,9 +28,20 @@ export default function SignInScreen() {
   const { setSession } = useDriveFlex();
 
   const [role, setRole] = useState<'host' | 'renter'>('renter');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('renter@driveflex.pk');
+  const [password, setPassword] = useState('password123');
   const [loading, setLoading] = useState(false);
+
+  const handleRoleChange = (newRole: 'host' | 'renter') => {
+    setRole(newRole);
+    if (newRole === 'host') {
+      setEmail('host@driveflex.pk');
+      setPassword('password123');
+    } else {
+      setEmail('renter@driveflex.pk');
+      setPassword('password123');
+    }
+  };
 
   const top = Platform.OS === 'web' ? Math.max(67, insets.top) : insets.top;
 
@@ -95,18 +106,30 @@ export default function SignInScreen() {
       }
 
       // Fallback
+      const isDemoHost = email.trim() === 'host@driveflex.pk';
+      const isDemoRenter = email.trim() === 'renter@driveflex.pk';
       await setSession({
-        name: email.split('@')[0],
+        id: isDemoHost ? 'owner-ali' : isDemoRenter ? 'usr-demo-renter' : `usr-${Date.now()}`,
+        name: isDemoHost ? 'Ali Raza' : isDemoRenter ? 'Omar Farooq' : email.split('@')[0],
         email: email.trim(),
         role,
+        phone: isDemoHost ? '+92 321 440 7812' : isDemoRenter ? '+92 300 8472910' : undefined,
+        city: 'Lahore',
+        businessName: role === 'host' ? 'Ali Motors Lahore' : undefined,
       });
       setLoading(false);
       router.replace(role === 'host' ? '/owner/dashboard' : '/(tabs)/profile');
     } catch {
+      const isDemoHost = email.trim() === 'host@driveflex.pk';
+      const isDemoRenter = email.trim() === 'renter@driveflex.pk';
       await setSession({
-        name: email.split('@')[0],
+        id: isDemoHost ? 'owner-ali' : isDemoRenter ? 'usr-demo-renter' : `usr-${Date.now()}`,
+        name: isDemoHost ? 'Ali Raza' : isDemoRenter ? 'Omar Farooq' : email.split('@')[0],
         email: email.trim(),
         role,
+        phone: isDemoHost ? '+92 321 440 7812' : isDemoRenter ? '+92 300 8472910' : undefined,
+        city: 'Lahore',
+        businessName: role === 'host' ? 'Ali Motors Lahore' : undefined,
       });
       setLoading(false);
       router.replace(role === 'host' ? '/owner/dashboard' : '/(tabs)/profile');
@@ -124,58 +147,6 @@ export default function SignInScreen() {
       setLoading(false);
       router.replace(role === 'host' ? '/owner/dashboard' : '/(tabs)/profile');
     }, 600);
-  };
-
-  const handleQuickDemoSignIn = async (demoRole: 'renter' | 'host') => {
-    setLoading(true);
-    setRole(demoRole);
-    const demoEmail = demoRole === 'renter' ? 'renter@driveflex.pk' : 'host@driveflex.pk';
-    const demoPassword = 'password123';
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-
-    try {
-      const baseUrl = getApiBaseUrl();
-      const res = await fetch(`${baseUrl}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: demoEmail,
-          password: demoPassword,
-          expectedRole: demoRole,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success && data.user) {
-        await setSession({
-          id: data.user.id,
-          name: data.user.name,
-          email: data.user.email,
-          role: data.user.role,
-          phone: data.user.phone,
-          city: data.user.city,
-          businessName: data.user.businessName,
-        });
-        setLoading(false);
-        router.replace(demoRole === 'host' ? '/owner/dashboard' : '/(tabs)/profile');
-        return;
-      }
-    } catch {
-      // offline fallback
-    }
-
-    await setSession({
-      id: demoRole === 'host' ? 'owner-ali' : 'usr-demo-renter',
-      name: demoRole === 'host' ? 'Ali Raza' : 'Omar Farooq',
-      email: demoEmail,
-      role: demoRole,
-      phone: demoRole === 'host' ? '+92 321 440 7812' : '+92 300 8472910',
-      city: 'Lahore',
-      businessName: demoRole === 'host' ? 'Ali Motors Lahore' : undefined,
-    });
-    setLoading(false);
-    router.replace(demoRole === 'host' ? '/owner/dashboard' : '/(tabs)/profile');
   };
 
   return (
@@ -207,7 +178,7 @@ export default function SignInScreen() {
 
       {/* Role Segmented Pill Toggle: [ Host ] [ Renter ] */}
       <View style={{ marginTop: 12, marginBottom: 8 }}>
-        <RoleSegmentedToggle activeRole={role} onSelectRole={setRole} />
+        <RoleSegmentedToggle activeRole={role} onSelectRole={handleRoleChange} />
       </View>
 
       {/* Graphic Illustration Banner (Screen 4 / Screen 5) */}
@@ -220,83 +191,6 @@ export default function SignInScreen() {
             : 'Sign in to find the perfect car for your next journey.'
         }
       />
-
-      {/* Quick Demo Credentials Box */}
-      <View
-        style={[
-          styles.demoCredentialsBox,
-          { backgroundColor: colors.card, borderColor: colors.border },
-        ]}
-      >
-        <View style={styles.demoBoxHeader}>
-          <Feather name="zap" size={14} color="#D97706" />
-          <Text style={[styles.demoBoxTitle, { color: colors.foreground }]}>
-            Demo Credentials (1-Tap Login)
-          </Text>
-        </View>
-
-        <View style={styles.demoCardsRow}>
-          {/* Demo Renter Card */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="1-Tap Login as Demo Renter"
-            onPress={() => void handleQuickDemoSignIn('renter')}
-            style={[
-              styles.demoCard,
-              {
-                backgroundColor: role === 'renter' ? (colors.isDark ? '#261619' : '#FEF2F2') : (colors.isDark ? '#141822' : '#F8FAFC'),
-                borderColor: role === 'renter' ? colors.primary : colors.border,
-              },
-            ]}
-          >
-            <View style={styles.demoCardTop}>
-              <View style={[styles.demoBadge, { backgroundColor: 'rgba(177, 18, 38, 0.12)' }]}>
-                <Text style={[styles.demoBadgeText, { color: colors.primary }]}>RENTER</Text>
-              </View>
-              <Text style={[styles.demoActionText, { color: colors.primary }]}>⚡ Login</Text>
-            </View>
-            <Text style={[styles.demoNameText, { color: colors.foreground }]} numberOfLines={1}>
-              Omar Farooq
-            </Text>
-            <Text style={[styles.demoEmailText, { color: colors.mutedForeground }]} numberOfLines={1}>
-              renter@driveflex.pk
-            </Text>
-            <Text style={[styles.demoPassText, { color: colors.mutedForeground }]}>
-              🔑 password123
-            </Text>
-          </Pressable>
-
-          {/* Demo Host Card */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="1-Tap Login as Demo Host"
-            onPress={() => void handleQuickDemoSignIn('host')}
-            style={[
-              styles.demoCard,
-              {
-                backgroundColor: role === 'host' ? (colors.isDark ? '#262013' : '#FEFCE8') : (colors.isDark ? '#141822' : '#F8FAFC'),
-                borderColor: role === 'host' ? '#C9A227' : colors.border,
-              },
-            ]}
-          >
-            <View style={styles.demoCardTop}>
-              <View style={[styles.demoBadge, { backgroundColor: 'rgba(201, 162, 39, 0.16)' }]}>
-                <Text style={[styles.demoBadgeText, { color: '#C9A227' }]}>HOST</Text>
-              </View>
-              <Text style={[styles.demoActionText, { color: '#C9A227' }]}>⚡ Login</Text>
-            </View>
-            <Text style={[styles.demoNameText, { color: colors.foreground }]} numberOfLines={1}>
-              Ali Raza
-            </Text>
-            <Text style={[styles.demoEmailText, { color: colors.mutedForeground }]} numberOfLines={1}>
-              host@driveflex.pk
-            </Text>
-            <Text style={[styles.demoPassText, { color: colors.mutedForeground }]}>
-              🔑 password123
-            </Text>
-          </Pressable>
-        </View>
-      </View>
 
       {/* Input Fields */}
       <View style={styles.inputsStack}>
@@ -390,65 +284,5 @@ const styles = StyleSheet.create({
   forgotPassText: {
     fontSize: 13,
     fontWeight: '600',
-  },
-  demoCredentialsBox: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 12,
-    marginBottom: 14,
-    gap: 10,
-  },
-  demoBoxHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  demoBoxTitle: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-  demoCardsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  demoCard: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 10,
-    gap: 4,
-  },
-  demoCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 2,
-  },
-  demoBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  demoBadgeText: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  demoActionText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  demoNameText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  demoEmailText: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  demoPassText: {
-    fontSize: 10.5,
-    marginTop: 1,
   },
 });

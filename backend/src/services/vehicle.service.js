@@ -11,10 +11,12 @@ const VehicleService = {
       vehicles.map(async (vehicle) => {
         const activeBooking = await BookingModel.findActiveByVehicleId(vehicle.id);
         const isBooked = !!activeBooking;
+        const isDelisted = Boolean(vehicle.isDelisted || vehicle.status === 'maintenance');
         return {
           ...vehicle,
-          status: isBooked ? 'booked' : 'available',
-          bookable: !isBooked,
+          isDelisted,
+          status: isDelisted ? 'maintenance' : isBooked ? 'booked' : 'available',
+          bookable: !isBooked && !isDelisted,
           currentBooking: activeBooking
             ? {
                 id: activeBooking.id,
@@ -39,10 +41,12 @@ const VehicleService = {
 
     const activeBooking = await BookingModel.findActiveByVehicleId(vehicle.id);
     const isBooked = !!activeBooking;
+    const isDelisted = Boolean(vehicle.isDelisted || vehicle.status === 'maintenance');
     return {
       ...vehicle,
-      status: isBooked ? 'booked' : 'available',
-      bookable: !isBooked,
+      isDelisted,
+      status: isDelisted ? 'maintenance' : isBooked ? 'booked' : 'available',
+      bookable: !isBooked && !isDelisted,
       currentBooking: activeBooking
         ? {
             id: activeBooking.id,
@@ -64,10 +68,12 @@ const VehicleService = {
 
     const activeBooking = await BookingModel.findActiveByVehicleId(vehicle.id);
     const isBooked = !!activeBooking;
+    const isDelisted = Boolean(vehicle.isDelisted || vehicle.status === 'maintenance');
     return {
       ...vehicle,
-      status: isBooked ? 'booked' : 'available',
-      bookable: !isBooked,
+      isDelisted,
+      status: isDelisted ? 'maintenance' : isBooked ? 'booked' : 'available',
+      bookable: !isBooked && !isDelisted,
       currentBooking: activeBooking
         ? {
             id: activeBooking.id,
@@ -89,10 +95,12 @@ const VehicleService = {
 
     const activeBooking = await BookingModel.findActiveByVehicleId(vehicle.id);
     const isBooked = !!activeBooking;
+    const isDelisted = Boolean(vehicle.isDelisted || vehicle.status === 'maintenance');
     return {
       vehicleId: vehicle.id,
-      status: isBooked ? 'booked' : 'available',
-      bookable: !isBooked,
+      isDelisted,
+      status: isDelisted ? 'maintenance' : isBooked ? 'booked' : 'available',
+      bookable: !isBooked && !isDelisted,
       currentBooking: activeBooking
         ? {
             id: activeBooking.id,
@@ -109,6 +117,20 @@ const VehicleService = {
    */
   createVehicle: async (data) => {
     return VehicleModel.create(data);
+  },
+
+  /**
+   * Update an existing vehicle
+   */
+  updateVehicle: async (id, data) => {
+    return VehicleModel.update(id, data);
+  },
+
+  /**
+   * Permanently delete a vehicle
+   */
+  deleteVehicle: async (id) => {
+    return VehicleModel.delete(id);
   },
 };
 

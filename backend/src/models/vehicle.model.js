@@ -26,6 +26,8 @@ const vehicleSchema = new mongoose.Schema(
       enum: ['available', 'rented', 'maintenance'],
       default: 'available',
     },
+    isDelisted: { type: Boolean, default: false },
+    customTripRules: { type: [String], default: [] },
     rating: { type: Number, default: 4.9 },
     reviewCount: { type: Number, default: 24 },
     seats: { type: Number, default: 5 },
@@ -329,37 +331,45 @@ const seedVehicles = [
   },
 ];
 
+let hasSyncedCoordinates = false;
+
+let memoryVehicles = seedVehicles.map((v) => ({ ...v, isDelisted: false }));
+
 const seedIfEmpty = async () => {
-  const count = await Vehicle.countDocuments();
-  if (count === 0) {
-    await Vehicle.insertMany(seedVehicles);
-    console.log(`🌱  Seeded ${seedVehicles.length} vehicles into MongoDB with precise coordinates`);
-  } else {
-    // Safely sync coordinates & location text to existing vehicles by matching id or slug
-    for (const sv of seedVehicles) {
-      await Vehicle.updateOne(
-        { $or: [{ id: sv.id }, { slug: sv.slug }] },
-        {
-          $set: {
-            make: sv.make,
-            brand: sv.brand,
-            model: sv.model,
-            city_name: sv.city_name,
-            location: sv.location,
-            address_text: sv.address_text,
-            latitude: sv.latitude,
-            longitude: sv.longitude,
-            locationCoords: sv.locationCoords,
-            price_per_day: sv.price_per_day,
-            pricePerDay: sv.pricePerDay,
-            status: sv.status,
-            license_plate: sv.license_plate,
-            host_id: sv.host_id,
-            ownerId: sv.ownerId,
-          },
-        }
-      );
+  if (mongoose.connection.readyState !== 1) return false;
+  try {
+    const count = await Vehicle.countDocuments();
+    if (count === 0) {
+      await Vehicle.insertMany(seedVehicles);
+      hasSyncedCoordinates = true;
+      console.log(`🌱  Seeded ${seedVehicles.length} vehicles into MongoDB with precise coordinates`);
+    } else if (!hasSyncedCoordinates) {
+      hasSyncedCoordinates = true;
+      for (const sv of seedVehicles) {
+        await Vehicle.updateOne(
+          { $or: [{ id: sv.id }, { slug: sv.slug }], latitude: { $exists: false } },
+          {
+            $set: {
+              make: sv.make,
+              brand: sv.brand,
+              model: sv.model,
+              city_name: sv.city_name,
+              location: sv.location,
+              address_text: sv.address_text,
+              latitude: sv.latitude,
+              longitude: sv.longitude,
+              locationCoords: sv.locationCoords,
+              license_plate: sv.license_plate,
+              host_id: sv.host_id,
+              ownerId: sv.ownerId,
+            },
+          }
+        );
+      }
     }
+    return true;
+  } catch {
+    return false;
   }
 };
 
@@ -385,34 +395,60 @@ function haversineDistanceKm(lat1, lon1, lat2, lon2) {
  * ------------------------------------------------------------------ */
 const VehicleModel = {
   findAll: async () => {
-    await seedIfEmpty();
-    return Vehicle.find().lean();
+    const dbReady = await seedIfEmpty();
+    if (dbReady) {
+      try {
+        return await Vehicle.find().lean();
+      } catch {}
+    }
+    return memoryVehicles;
   },
 
   findById: async (id) => {
-    return Vehicle.findOne({ id }).lean();
+    if (mongoose.connection.readyState === 1) {
+      try {
+        return await Vehicle.findOne({ $or: [{ id }, { slug: id }] }).lean();
+      } catch {}
+    }
+    return memoryVehicles.find((v) => v.id === id || v.slug === id) || null;
   },
 
   findBySlug: async (slug) => {
-    return Vehicle.findOne({ slug }).lean();
+    if (mongoose.connection.readyState === 1) {
+      try {
+        return await Vehicle.findOne({ slug }).lean();
+      } catch {}
+    }
+    return memoryVehicles.find((v) => v.slug === slug || v.id === slug) || null;
   },
 
   findByHost: async (hostId) => {
-    await seedIfEmpty();
-    return Vehicle.find({ $or: [{ host_id: hostId }, { ownerId: hostId }] }).lean();
+    const dbReady = await seedIfEmpty();
+    if (dbReady) {
+      try {
+        return await Vehicle.find({ $or: [{ host_id: hostId }, { ownerId: hostId }] }).lean();
+      } catch {}
+    }
+    return memoryVehicles.filter((v) => v.host_id === hostId || v.ownerId === hostId);
   },
 
   findByCity: async (cityName) => {
-    await seedIfEmpty();
+    const dbReady = await seedIfEmpty();
     const regex = new RegExp(cityName.trim(), 'i');
-    return Vehicle.find({
-      $or: [{ city_name: regex }, { location: regex }, { address_text: regex }],
-    }).lean();
+    if (dbReady) {
+      try {
+        return await Vehicle.find({
+          $or: [{ city_name: regex }, { location: regex }, { address_text: regex }],
+        }).lean();
+      } catch {}
+    }
+    return memoryVehicles.filter(
+      (v) => regex.test(v.city_name || '') || regex.test(v.location || '') || regex.test(v.address_text || '')
+    );
   },
 
   findByNear: async ({ lat, lng, radiusKm = 25 }) => {
-    await seedIfEmpty();
-    const all = await Vehicle.find().lean();
+    const all = await VehicleModel.findAll();
     return all
       .map((car) => {
         const dist = haversineDistanceKm(lat, lng, car.latitude, car.longitude);
@@ -424,7 +460,7 @@ const VehicleModel = {
 
   create: async (vehicleData) => {
     const coords = [vehicleData.longitude || 71.5249, vehicleData.latitude || 30.1575];
-    const newVehicle = new Vehicle({
+    const payload = {
       id: `v-${Date.now()}`,
       gallery: vehicleData.gallery || [vehicleData.image],
       make: vehicleData.make || vehicleData.brand,
@@ -435,17 +471,48 @@ const VehicleModel = {
       ownerId: vehicleData.ownerId || vehicleData.host_id,
       locationCoords: { type: 'Point', coordinates: coords },
       ...vehicleData,
-    });
-    return (await newVehicle.save()).toObject();
+    };
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const newVehicle = new Vehicle(payload);
+        return (await newVehicle.save()).toObject();
+      } catch {}
+    }
+    memoryVehicles = [payload, ...memoryVehicles];
+    return payload;
   },
 
   update: async (id, updateData) => {
-    return Vehicle.findOneAndUpdate({ id }, updateData, { new: true }).lean();
+    if (mongoose.connection.readyState === 1) {
+      try {
+        return await Vehicle.findOneAndUpdate(
+          { $or: [{ id }, { slug: id }] },
+          { $set: updateData },
+          { new: true }
+        ).lean();
+      } catch {}
+    }
+    let updated = null;
+    memoryVehicles = memoryVehicles.map((v) => {
+      if (v.id === id || v.slug === id) {
+        updated = { ...v, ...updateData };
+        return updated;
+      }
+      return v;
+    });
+    return updated;
   },
 
   delete: async (id) => {
-    const result = await Vehicle.deleteOne({ id });
-    return result.deletedCount > 0;
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const result = await Vehicle.deleteOne({ $or: [{ id }, { slug: id }] });
+        return result.deletedCount > 0;
+      } catch {}
+    }
+    const before = memoryVehicles.length;
+    memoryVehicles = memoryVehicles.filter((v) => v.id !== id && v.slug !== id);
+    return memoryVehicles.length < before;
   },
 };
 

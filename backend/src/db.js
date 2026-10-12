@@ -7,17 +7,16 @@ const connectDB = async () => {
   if (isConnected) return;
 
   if (!config.mongoUri) {
-    console.error('❌  MONGO_URI is not set in .env');
-    process.exit(1);
+    console.warn('⚠️  MONGO_URI is not set in .env — running in in-memory fallback mode.');
+    return;
   }
 
   try {
-    await mongoose.connect(config.mongoUri);
+    await mongoose.connect(config.mongoUri, { serverSelectionTimeoutMS: 4000 });
     isConnected = true;
     console.log('✅  MongoDB connected:', mongoose.connection.host);
   } catch (err) {
-    console.error('❌  MongoDB connection failed:', err.message);
-    process.exit(1);
+    console.warn('⚠️  MongoDB connection failed, using in-memory seed fallback:', err.message);
   }
 };
 

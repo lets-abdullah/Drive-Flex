@@ -4,7 +4,6 @@ import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,30 +20,9 @@ export default function FavoritesScreen() {
   const { favorites, vehicles, toggleFavorite, apiError, refresh, session, theme, toggleTheme } = useDriveFlex();
   const [search, setSearch] = useState('');
 
-  // Top Right Filter & Theme State
-  const [filterModalOpen, setFilterModalOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [selectedSort, setSelectedSort] = useState<'recommended' | 'price-asc' | 'price-desc' | 'rating' | 'brand'>('recommended');
-  const [maxPrice, setMaxPrice] = useState<number | null>(null);
-  const [selectedTransmission, setSelectedTransmission] = useState<string | null>(null);
-
-  const hasActiveFilters =
-    selectedCategory !== 'All' ||
-    selectedTransmission !== null ||
-    maxPrice !== null ||
-    selectedSort !== 'recommended';
-
-  const handleResetFavoritesFilters = () => {
-    setSelectedCategory('All');
-    setSelectedSort('recommended');
-    setMaxPrice(null);
-    setSelectedTransmission(null);
-  };
-
   const savedVehicles = useMemo(() => {
     let list = vehicles.filter((v) => favorites.includes(v.id));
 
-    // 1. Search text
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter((v) =>
@@ -52,34 +30,8 @@ export default function FavoritesScreen() {
       );
     }
 
-    // 2. Category filter
-    if (selectedCategory !== 'All') {
-      list = list.filter((v) => v.category.toLowerCase() === selectedCategory.toLowerCase());
-    }
-
-    // 3. Transmission filter
-    if (selectedTransmission) {
-      list = list.filter((v) => v.transmission.toLowerCase() === selectedTransmission.toLowerCase());
-    }
-
-    // 4. Max price filter
-    if (maxPrice !== null) {
-      list = list.filter((v) => v.pricePerDay <= maxPrice);
-    }
-
-    // 5. Sorting
-    if (selectedSort === 'price-asc') {
-      list.sort((a, b) => a.pricePerDay - b.pricePerDay);
-    } else if (selectedSort === 'price-desc') {
-      list.sort((a, b) => b.pricePerDay - a.pricePerDay);
-    } else if (selectedSort === 'rating') {
-      list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-    } else if (selectedSort === 'brand') {
-      list.sort((a, b) => a.brand.localeCompare(b.brand));
-    }
-
     return list;
-  }, [vehicles, favorites, search, selectedCategory, selectedTransmission, maxPrice, selectedSort]);
+  }, [vehicles, favorites, search]);
 
   const totalEstimatedCost = useMemo(() => {
     return savedVehicles.reduce((acc, v) => acc + v.pricePerDay, 0);
@@ -119,27 +71,6 @@ export default function FavoritesScreen() {
         />
       </Pressable>
 
-      {/* Filters Button */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Filter favorites"
-        onPress={() => setFilterModalOpen(true)}
-        style={[
-          styles.headerActionBtn,
-          {
-            backgroundColor: hasActiveFilters ? colors.primary : colors.card,
-            borderColor: hasActiveFilters ? colors.primary : colors.border,
-          },
-        ]}
-      >
-        <Feather
-          name="sliders"
-          size={16}
-          color={hasActiveFilters ? '#FFFFFF' : colors.foreground}
-        />
-        {hasActiveFilters && <View style={styles.filterActiveDot} />}
-      </Pressable>
-
       {/* Trash button if items exist */}
       {favorites.length > 0 && (
         <Pressable
@@ -157,289 +88,16 @@ export default function FavoritesScreen() {
     </View>
   );
 
-  const renderActiveFilters = () => {
-    if (!hasActiveFilters) return null;
-    return (
-      <View style={styles.activeFiltersRow}>
-        {selectedCategory !== 'All' && (
-          <View style={[styles.activeFilterChip, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
-            <Text style={[styles.activeFilterChipText, { color: colors.foreground }]}>
-              {selectedCategory}
-            </Text>
-            <Pressable onPress={() => setSelectedCategory('All')} hitSlop={6}>
-              <Feather name="x" size={12} color={colors.mutedForeground} />
-            </Pressable>
-          </View>
-        )}
-        {selectedTransmission && (
-          <View style={[styles.activeFilterChip, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
-            <Text style={[styles.activeFilterChipText, { color: colors.foreground }]}>
-              {selectedTransmission}
-            </Text>
-            <Pressable onPress={() => setSelectedTransmission(null)} hitSlop={6}>
-              <Feather name="x" size={12} color={colors.mutedForeground} />
-            </Pressable>
-          </View>
-        )}
-        {maxPrice !== null && (
-          <View style={[styles.activeFilterChip, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
-            <Text style={[styles.activeFilterChipText, { color: colors.foreground }]}>
-              Under ${maxPrice}/d
-            </Text>
-            <Pressable onPress={() => setMaxPrice(null)} hitSlop={6}>
-              <Feather name="x" size={12} color={colors.mutedForeground} />
-            </Pressable>
-          </View>
-        )}
-        {selectedSort !== 'recommended' && (
-          <View style={[styles.activeFilterChip, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
-            <Text style={[styles.activeFilterChipText, { color: colors.foreground }]}>
-              Sort: {selectedSort}
-            </Text>
-            <Pressable onPress={() => setSelectedSort('recommended')} hitSlop={6}>
-              <Feather name="x" size={12} color={colors.mutedForeground} />
-            </Pressable>
-          </View>
-        )}
-        <Pressable onPress={handleResetFavoritesFilters} style={styles.resetFiltersBtn}>
-          <Text style={{ color: colors.primary, fontSize: 11, fontWeight: '700' }}>Reset All</Text>
-        </Pressable>
-      </View>
-    );
-  };
-
-  const renderFilterModal = () => (
-    <Modal
-      visible={filterModalOpen}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setFilterModalOpen(false)}
-    >
-      <Pressable
-        style={styles.modalBackdrop}
-        onPress={() => setFilterModalOpen(false)}
-      >
-        <Pressable
-          style={[
-            styles.filterModalCard,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-          onPress={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <View style={styles.filterModalHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Feather name="sliders" size={18} color={colors.primary} />
-              <Text style={[styles.filterModalTitle, { color: colors.foreground }]}>
-                Filter Saved Cars
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => setFilterModalOpen(false)}
-              hitSlop={8}
-              style={[styles.closeModalBtn, { borderColor: colors.border }]}
-            >
-              <Feather name="x" size={16} color={colors.foreground} />
-            </Pressable>
-          </View>
-
-          {/* Category Chips */}
-          <View style={{ gap: 6, marginTop: 14 }}>
-            <Text style={[styles.filterSectionLabel, { color: colors.foreground }]}>
-              Vehicle Category
-            </Text>
-            <View style={styles.filterPillsRow}>
-              {['All', 'Sedan', 'SUV', 'Luxury', 'Electric', 'Convertible', 'Sports'].map((cat) => {
-                const isSel = selectedCategory.toLowerCase() === cat.toLowerCase();
-                return (
-                  <Pressable
-                    key={cat}
-                    onPress={() => setSelectedCategory(cat)}
-                    style={[
-                      styles.filterOptionPill,
-                      {
-                        backgroundColor: isSel ? colors.primary : colors.secondary,
-                        borderColor: isSel ? colors.primary : colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionPillText,
-                        {
-                          color: isSel ? '#FFFFFF' : colors.foreground,
-                          fontWeight: isSel ? '700' : '500',
-                        },
-                      ]}
-                    >
-                      {cat}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Sort By */}
-          <View style={{ gap: 6, marginTop: 14 }}>
-            <Text style={[styles.filterSectionLabel, { color: colors.foreground }]}>
-              Sort By
-            </Text>
-            <View style={styles.filterPillsRow}>
-              {[
-                { key: 'recommended', label: 'Recommended' },
-                { key: 'price-asc', label: 'Price: Low to High' },
-                { key: 'price-desc', label: 'Price: High to Low' },
-                { key: 'rating', label: 'Highest Rated' },
-                { key: 'brand', label: 'Brand (A-Z)' },
-              ].map((s) => {
-                const isSel = selectedSort === s.key;
-                return (
-                  <Pressable
-                    key={s.key}
-                    onPress={() => setSelectedSort(s.key as any)}
-                    style={[
-                      styles.filterOptionPill,
-                      {
-                        backgroundColor: isSel ? colors.primary : colors.secondary,
-                        borderColor: isSel ? colors.primary : colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionPillText,
-                        {
-                          color: isSel ? '#FFFFFF' : colors.foreground,
-                          fontWeight: isSel ? '700' : '500',
-                        },
-                      ]}
-                    >
-                      {s.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Max Price */}
-          <View style={{ gap: 6, marginTop: 14 }}>
-            <Text style={[styles.filterSectionLabel, { color: colors.foreground }]}>
-              Daily Budget
-            </Text>
-            <View style={styles.filterPillsRow}>
-              {[
-                { label: 'Any Price', val: null },
-                { label: '< $150/d', val: 150 },
-                { label: '< $250/d', val: 250 },
-                { label: '< $400/d', val: 400 },
-              ].map((p) => {
-                const isSel = maxPrice === p.val;
-                return (
-                  <Pressable
-                    key={p.label}
-                    onPress={() => setMaxPrice(p.val)}
-                    style={[
-                      styles.filterOptionPill,
-                      {
-                        backgroundColor: isSel ? colors.primary : colors.secondary,
-                        borderColor: isSel ? colors.primary : colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionPillText,
-                        {
-                          color: isSel ? '#FFFFFF' : colors.foreground,
-                          fontWeight: isSel ? '700' : '500',
-                        },
-                      ]}
-                    >
-                      {p.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Transmission */}
-          <View style={{ gap: 6, marginTop: 14 }}>
-            <Text style={[styles.filterSectionLabel, { color: colors.foreground }]}>
-              Transmission
-            </Text>
-            <View style={styles.filterPillsRow}>
-              {[
-                { label: 'All', val: null },
-                { label: 'Automatic', val: 'Automatic' },
-                { label: 'Manual', val: 'Manual' },
-              ].map((t) => {
-                const isSel = selectedTransmission === t.val;
-                return (
-                  <Pressable
-                    key={t.label}
-                    onPress={() => setSelectedTransmission(t.val)}
-                    style={[
-                      styles.filterOptionPill,
-                      {
-                        backgroundColor: isSel ? colors.primary : colors.secondary,
-                        borderColor: isSel ? colors.primary : colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionPillText,
-                        {
-                          color: isSel ? '#FFFFFF' : colors.foreground,
-                          fontWeight: isSel ? '700' : '500',
-                        },
-                      ]}
-                    >
-                      {t.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Modal Actions */}
-          <View style={styles.filterModalActions}>
-            <Pressable
-              onPress={handleResetFavoritesFilters}
-              style={[styles.filterResetBtn, { borderColor: colors.border }]}
-            >
-              <Text style={[styles.filterResetBtnText, { color: colors.foreground }]}>
-                Reset
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setFilterModalOpen(false)}
-              style={[styles.filterApplyBtn, { backgroundColor: colors.primary }]}
-            >
-              <Text style={styles.filterApplyBtnText}>Apply Filters</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-
   if (!session) {
     return (
       <Page tabbed>
         {/* Header */}
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.eyebrow, { color: colors.accent }]}>YOUR SHORTLIST</Text>
+            {/* <Text style={[styles.eyebrow, { color: colors.accent }]}>YOUR SHORTLIST</Text> */}
             <Text style={[styles.headerTitle, { color: colors.foreground }]}>Saved Rides</Text>
           </View>
-          {renderHeaderActions()}
         </View>
-        {renderActiveFilters()}
 
         {/* Account Locked Card */}
         <View
@@ -468,7 +126,6 @@ export default function FavoritesScreen() {
             <Feather name="arrow-right" size={16} color="#FFFFFF" style={{ marginLeft: 6 }} />
           </Pressable>
         </View>
-        {renderFilterModal()}
       </Page>
     );
   }
@@ -483,7 +140,6 @@ export default function FavoritesScreen() {
         </View>
         {renderHeaderActions()}
       </View>
-      {renderActiveFilters()}
 
       {/* ─── SEARCH IN SHORTLIST ─── */}
       {favorites.length > 1 && (
@@ -608,7 +264,6 @@ export default function FavoritesScreen() {
           </View>
         </View>
       )}
-      {renderFilterModal()}
     </Page>
   );
 }
@@ -645,121 +300,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
-  filterActiveDot: {
-    position: 'absolute',
-    top: 7,
-    right: 7,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: '#FFFFFF',
-  },
-  activeFiltersRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 14,
-  },
-  activeFilterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 6,
-  },
-  activeFilterChipText: {
-    fontSize: 11.5,
-    fontWeight: '700',
-  },
-  resetFiltersBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  filterModalCard: {
-    width: '100%',
-    maxWidth: 420,
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  filterModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  filterModalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  closeModalBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterSectionLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  filterPillsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  filterOptionPill: {
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  filterOptionPillText: {
-    fontSize: 12,
-  },
-  filterModalActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 10,
-    marginTop: 20,
-  },
-  filterResetBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  filterResetBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  filterApplyBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  filterApplyBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
+
   clearBtn: {
     width: 44,
     height: 44,

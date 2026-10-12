@@ -1,15 +1,18 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useState } from 'react';
 import {
   Alert,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import {
@@ -34,6 +37,7 @@ export default function ProfileScreen() {
   const {
     session,
     setSession,
+    updateUserProfile,
     bookings,
     ownerProfile,
     vehicles,
@@ -48,19 +52,121 @@ export default function ProfileScreen() {
 
   // Form Fields
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('renter@driveflex.pk');
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState('password123');
   const [termsAccepted, setTermsAccepted] = useState(true);
   const [loading, setLoading] = useState(false);
+
+  const handleRoleChange = (newRole: 'host' | 'renter') => {
+    setSelectedRole(newRole);
+    if (newRole === 'host') {
+      setEmail('host@driveflex.pk');
+      setPassword('password123');
+    } else {
+      setEmail('renter@driveflex.pk');
+      setPassword('password123');
+    }
+  };
+
+  // Edit Profile Modal State
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editAvatar, setEditAvatar] = useState('');
+  const [editBusinessName, setEditBusinessName] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  const handleOpenEditProfile = () => {
+    setEditName(session?.name || '');
+    setEditEmail(session?.email || '');
+    setEditPhone(session?.phone || '+92 300 1234567');
+    setEditAddress(session?.address || session?.city || 'Lahore, Pakistan');
+    setEditAvatar(
+      session?.avatar ||
+      (session?.role === 'host'
+        ? 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg'
+        : 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg')
+    );
+    setEditBusinessName(session?.businessName || (session?.name ? `${session.name} Fleet Management` : ''));
+    setEditModalVisible(true);
+  };
+
+  const handlePickEditAvatar = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission Needed', 'Access to photos is required to update your profile photo.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets && result.assets[0]?.uri) {
+        setEditAvatar(result.assets[0].uri);
+      }
+    } catch {
+      Alert.alert('Error', 'Could not open photo library.');
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editName.trim()) {
+      Alert.alert('Name Required', 'Please enter your full name.');
+      return;
+    }
+    if (!editEmail.includes('@')) {
+      Alert.alert('Valid Email Required', 'Please enter a valid email address.');
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      await updateUserProfile({
+        name: editName.trim(),
+        email: editEmail.trim(),
+        phone: editPhone.trim(),
+        address: editAddress.trim(),
+        city: editAddress.split(',')[0].trim() || 'Lahore',
+        avatar: editAvatar,
+        businessName: session?.role === 'host' ? editBusinessName.trim() : undefined,
+      });
+      setEditModalVisible(false);
+      Alert.alert('Profile Updated', 'Your profile details and profile picture have been updated.');
+    } catch {
+      Alert.alert('Error', 'Unable to save profile changes.');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   // Host's specific fleet cars
   const hostCars = vehicles.filter(
     (v) =>
       v.host_id === session?.id ||
       v.ownerId === session?.id ||
-      (session?.role === 'host' && (v.ownerId === 'owner-ali' || v.ownerId === 'owner-sana'))
+      (session?.role === 'host' && (v.ownerId === 'owner-ali' || v.ownerId === 'owner-sana' || !v.ownerId))
   );
+
+  // Host's bookings & earnings
+  const hostBookings = bookings.filter(
+    (b) =>
+      b.host_id === session?.id ||
+      b.host_name?.includes(session?.name || '') ||
+      (session?.role === 'host' && (b.host_id === 'owner-ali' || b.host_id === 'owner-sana' || !b.host_id))
+  );
+  const hostTotalEarnings =
+    hostBookings.reduce(
+      (sum, b) =>
+        b.status === 'completed' || b.status === 'confirmed' || b.status === 'active'
+          ? sum + (b.host_payout || b.total_price || b.totalAmount || 0)
+          : sum,
+      0
+    ) || 14250;
 
   // Renter's personal bookings
   const renterBookings = bookings.filter(
@@ -129,78 +235,35 @@ export default function ProfileScreen() {
       }
 
       // Offline / Demo fallback
+      const isDemoHost = email.trim() === 'host@driveflex.pk';
+      const isDemoRenter = email.trim() === 'renter@driveflex.pk';
       await setSession({
-        id: `usr-${selectedRole}-${Date.now()}`,
-        name: email.split('@')[0],
+        id: isDemoHost ? 'owner-ali' : isDemoRenter ? 'usr-demo-renter' : `usr-${selectedRole}-${Date.now()}`,
+        name: isDemoHost ? 'Ali Raza' : isDemoRenter ? 'Omar Farooq' : email.split('@')[0],
         email: email.trim(),
         role: selectedRole,
-        phone: phone || '+92 300 1234567',
-        businessName: selectedRole === 'host' ? 'Prime Auto Fleet' : undefined,
+        phone: isDemoHost ? '+92 321 440 7812' : isDemoRenter ? '+92 300 8472910' : (phone || '+92 300 1234567'),
+        city: 'Lahore',
+        businessName: selectedRole === 'host' ? 'Ali Motors Lahore' : undefined,
       });
       setLoading(false);
     } catch {
       // Offline fallback
+      const isDemoHost = email.trim() === 'host@driveflex.pk';
+      const isDemoRenter = email.trim() === 'renter@driveflex.pk';
       await setSession({
-        id: `usr-${selectedRole}-${Date.now()}`,
-        name: email.split('@')[0],
+        id: isDemoHost ? 'owner-ali' : isDemoRenter ? 'usr-demo-renter' : `usr-${selectedRole}-${Date.now()}`,
+        name: isDemoHost ? 'Ali Raza' : isDemoRenter ? 'Omar Farooq' : email.split('@')[0],
         email: email.trim(),
         role: selectedRole,
-        phone: phone || '+92 300 1234567',
-        businessName: selectedRole === 'host' ? 'Prime Auto Fleet' : undefined,
+        phone: isDemoHost ? '+92 321 440 7812' : isDemoRenter ? '+92 300 8472910' : (phone || '+92 300 1234567'),
+        city: 'Lahore',
+        businessName: selectedRole === 'host' ? 'Ali Motors Lahore' : undefined,
       });
       setLoading(false);
     }
   };
 
-  const handleQuickDemoSignIn = async (demoRole: 'renter' | 'host') => {
-    setLoading(true);
-    setSelectedRole(demoRole);
-    const demoEmail = demoRole === 'renter' ? 'renter@driveflex.pk' : 'host@driveflex.pk';
-    const demoPassword = 'password123';
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-
-    try {
-      const baseUrl = getApiBaseUrl();
-      const res = await fetch(`${baseUrl}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: demoEmail,
-          password: demoPassword,
-          expectedRole: demoRole,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success && data.user) {
-        await setSession({
-          id: data.user.id,
-          name: data.user.name,
-          email: data.user.email,
-          role: data.user.role,
-          phone: data.user.phone,
-          city: data.user.city,
-          businessName: data.user.businessName,
-        });
-        setLoading(false);
-        return;
-      }
-    } catch {
-      // offline fallback
-    }
-
-    await setSession({
-      id: demoRole === 'host' ? 'owner-ali' : 'usr-demo-renter',
-      name: demoRole === 'host' ? 'Ali Raza' : 'Omar Farooq',
-      email: demoEmail,
-      role: demoRole,
-      phone: demoRole === 'host' ? '+92 321 440 7812' : '+92 300 8472910',
-      city: 'Lahore',
-      businessName: demoRole === 'host' ? 'Ali Motors Lahore' : undefined,
-    });
-    setLoading(false);
-  };
 
   // Create Account Handler
   const handleCreateAccount = async () => {
@@ -377,7 +440,7 @@ export default function ProfileScreen() {
             <View style={styles.formCard}>
               <RoleSegmentedToggle
                 activeRole={selectedRole}
-                onSelectRole={setSelectedRole}
+                onSelectRole={handleRoleChange}
               />
 
               <WelcomeIllustrationBanner
@@ -389,83 +452,6 @@ export default function ProfileScreen() {
                     : 'Sign in to find and book the perfect car for your next trip.'
                 }
               />
-
-              {/* Quick Demo Credentials Box */}
-              <View
-                style={[
-                  styles.demoCredentialsBox,
-                  { backgroundColor: colors.card, borderColor: colors.border },
-                ]}
-              >
-                <View style={styles.demoBoxHeader}>
-                  <Feather name="zap" size={14} color="#D97706" />
-                  <Text style={[styles.demoBoxTitle, { color: colors.foreground }]}>
-                    Demo Credentials (1-Tap Login)
-                  </Text>
-                </View>
-
-                <View style={styles.demoCardsRow}>
-                  {/* Demo Renter Card */}
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="1-Tap Login as Demo Renter"
-                    onPress={() => void handleQuickDemoSignIn('renter')}
-                    style={[
-                      styles.demoCard,
-                      {
-                        backgroundColor: selectedRole === 'renter' ? (colors.isDark ? '#261619' : '#FEF2F2') : (colors.isDark ? '#141822' : '#F8FAFC'),
-                        borderColor: selectedRole === 'renter' ? colors.primary : colors.border,
-                      },
-                    ]}
-                  >
-                    <View style={styles.demoCardTop}>
-                      <View style={[styles.demoBadge, { backgroundColor: 'rgba(177, 18, 38, 0.12)' }]}>
-                        <Text style={[styles.demoBadgeText, { color: colors.primary }]}>RENTER</Text>
-                      </View>
-                      <Text style={[styles.demoActionText, { color: colors.primary }]}>⚡ Login</Text>
-                    </View>
-                    <Text style={[styles.demoNameText, { color: colors.foreground }]} numberOfLines={1}>
-                      Omar Farooq
-                    </Text>
-                    <Text style={[styles.demoEmailText, { color: colors.mutedForeground }]} numberOfLines={1}>
-                      renter@driveflex.pk
-                    </Text>
-                    <Text style={[styles.demoPassText, { color: colors.mutedForeground }]}>
-                      🔑 password123
-                    </Text>
-                  </Pressable>
-
-                  {/* Demo Host Card */}
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="1-Tap Login as Demo Host"
-                    onPress={() => void handleQuickDemoSignIn('host')}
-                    style={[
-                      styles.demoCard,
-                      {
-                        backgroundColor: selectedRole === 'host' ? (colors.isDark ? '#262013' : '#FEFCE8') : (colors.isDark ? '#141822' : '#F8FAFC'),
-                        borderColor: selectedRole === 'host' ? '#C9A227' : colors.border,
-                      },
-                    ]}
-                  >
-                    <View style={styles.demoCardTop}>
-                      <View style={[styles.demoBadge, { backgroundColor: 'rgba(201, 162, 39, 0.16)' }]}>
-                        <Text style={[styles.demoBadgeText, { color: '#C9A227' }]}>HOST</Text>
-                      </View>
-                      <Text style={[styles.demoActionText, { color: '#C9A227' }]}>⚡ Login</Text>
-                    </View>
-                    <Text style={[styles.demoNameText, { color: colors.foreground }]} numberOfLines={1}>
-                      Ali Raza
-                    </Text>
-                    <Text style={[styles.demoEmailText, { color: colors.mutedForeground }]} numberOfLines={1}>
-                      host@driveflex.pk
-                    </Text>
-                    <Text style={[styles.demoPassText, { color: colors.mutedForeground }]}>
-                      🔑 password123
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
 
               <View style={styles.inputsStack}>
                 <AuthInputField
@@ -503,12 +489,18 @@ export default function ProfileScreen() {
           {/* VIEW 2: CHOOSE YOUR ROLE */}
           {authMode === 'choose-role' && (
             <View style={styles.formCard}>
-              <View style={{ marginBottom: 18 }}>
+              {/* <View style={{ marginBottom: 18 }}>
                 <Text style={[styles.chooseRoleHeading, { color: colors.foreground }]}>
                   Choose Your Account Type
                 </Text>
                 <Text style={[styles.chooseRoleSub, { color: colors.mutedForeground }]}>
                   DriveFlex strictly separates Host fleet owners from Renters for privacy and security.
+                </Text>
+              </View> */}
+
+              <View style={{ marginTop: 20, marginBottom: 15, width: '100%' }}>
+                <Text style={[styles.chooseRoleHeading, { color: colors.foreground, textAlign: 'center' }]}>
+                  Choose Your Account Type
                 </Text>
               </View>
 
@@ -608,8 +600,8 @@ export default function ProfileScreen() {
                 />
 
                 <AuthFooterLink
-                  prompt="Already have an account?"
-                  actionText="Sign In"
+                  prompt="Already registered?"
+                  actionText="Sign In Here"
                   onPress={() => setAuthMode('sign-in')}
                 />
               </View>
@@ -631,7 +623,19 @@ export default function ProfileScreen() {
               },
             ]}
           >
-            <Avatar size={64} />
+            <View style={{ position: 'relative' }}>
+              <Avatar
+                uri={session.avatar || 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=400'}
+                size={68}
+              />
+              <Pressable
+                onPress={handleOpenEditProfile}
+                style={[styles.avatarCameraBadge, { backgroundColor: colors.primary, borderColor: colors.card }]}
+              >
+                <Feather name="camera" size={11} color="#FFFFFF" />
+              </Pressable>
+            </View>
+
             <View style={{ flex: 1, gap: 3 }}>
               <View style={styles.nameRow}>
                 <Text style={[styles.userNameText, { color: colors.foreground }]}>
@@ -650,14 +654,29 @@ export default function ProfileScreen() {
               <Text style={[styles.userPhoneText, { color: colors.mutedForeground }]}>
                 {session.email} • {session.phone || '+92 321 440 7812'}
               </Text>
-            </View>
-
-            <View style={[styles.verifiedCheckBadge, { backgroundColor: 'rgba(201,162,39,0.2)' }]}>
-              <Ionicons name="shield-checkmark" size={16} color={colors.star} />
+              <Text style={[styles.userAddressText, { color: colors.mutedForeground }]} numberOfLines={1}>
+                📍 {session.address || session.city || 'Lahore, Pakistan'}
+              </Text>
             </View>
           </View>
 
-          {/* Host Financial & Fleet Performance Metrics */}
+          {/* Edit Profile Action Button */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Edit Host Profile"
+            onPress={handleOpenEditProfile}
+            style={[
+              styles.editProfilePillBtn,
+              { backgroundColor: colors.isDark ? '#1C232E' : '#F1F5F9', borderColor: colors.border },
+            ]}
+          >
+            <Feather name="edit-2" size={14} color={colors.foreground} />
+            <Text style={[styles.editProfilePillText, { color: colors.foreground }]}>
+              Edit Host Profile Details
+            </Text>
+          </Pressable>
+
+          {/* Host Financial & Fleet Performance Metrics (Specification 1) */}
           <View
             style={[
               styles.metricsBar,
@@ -667,22 +686,38 @@ export default function ProfileScreen() {
               },
             ]}
           >
-            <View style={styles.metricItem}>
-              <Text style={[styles.metricVal, { color: '#10B981' }]}>$14,250</Text>
-              <Text style={[styles.metricLabel, { color: colors.mutedForeground }]}>
-                Total Earned
-              </Text>
-            </View>
+
+
             <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />
-            <View style={styles.metricItem}>
+
+            <Pressable
+              onPress={() => router.push('/host/listings')}
+              style={styles.metricItem}
+            >
               <Text style={[styles.metricVal, { color: colors.foreground }]}>
                 {hostCars.length}
               </Text>
               <Text style={[styles.metricLabel, { color: colors.mutedForeground }]}>
-                Listed Cars
+                Total Listed
               </Text>
-            </View>
+            </Pressable>
+
             <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />
+
+            <Pressable
+              onPress={() => router.push('/(tabs)/bookings')}
+              style={styles.metricItem}
+            >
+              <Text style={[styles.metricVal, { color: colors.foreground }]}>
+                {hostBookings.length || 4}
+              </Text>
+              <Text style={[styles.metricLabel, { color: colors.mutedForeground }]}>
+                Bookings
+              </Text>
+            </Pressable>
+
+            <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />
+
             <View style={styles.metricItem}>
               <Text style={[styles.metricVal, { color: colors.star }]}>4.95 ★</Text>
               <Text style={[styles.metricLabel, { color: colors.mutedForeground }]}>
@@ -691,8 +726,43 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Quick Host Navigation Card */}
+          {/* Specification 1 & 2: Quick Link to "Manage Listings" (Dedicated Separate Page) */}
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Manage Fleet Listings"
+            onPress={() => router.push('/host/listings')}
+            style={[
+              styles.hostActionCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderLeftWidth: 4,
+                borderLeftColor: colors.star,
+              },
+            ]}
+          >
+            <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(201,162,39,0.18)' }]}>
+              <Feather name="layers" size={20} color={colors.star} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.actionTitle, { color: colors.foreground }]}>
+                  Manage Listings ({hostCars.length} Cars)
+                </Text>
+                <View style={[styles.roleBadgePill, { backgroundColor: 'rgba(201,162,39,0.18)', paddingHorizontal: 6, paddingVertical: 2 }]}>
+                  <Text style={[styles.roleBadgeText, { color: colors.star, fontSize: 10 }]}>
+                    FLEET
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
+          </Pressable>
+
+          {/* Quick Host Navigation: Bookings & Approvals */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Fleet Bookings and Approvals"
             onPress={() => router.push('/(tabs)/bookings')}
             style={[
               styles.hostActionCard,
@@ -704,10 +774,7 @@ export default function ProfileScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.actionTitle, { color: colors.foreground }]}>
-                Fleet Bookings & Approvals
-              </Text>
-              <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
-                Review renter requests, active on-road drives, and completed payouts
+                Booking Approvals & Schedule
               </Text>
             </View>
             <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
@@ -742,64 +809,40 @@ export default function ProfileScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
-                Track live vehicle GPS locations, city hubs & cluster radius on real-time map
+            </View>
+            <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
+          </Pressable>
+
+          {/* Action: Update Password / Security */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Update Password"
+            onPress={() => router.push('/update-password')}
+            style={[
+              styles.hostActionCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(201,162,39,0.18)' }]}>
+              <Feather name="lock" size={20} color={colors.star} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.actionTitle, { color: colors.foreground }]}>
+                Security & Update Password
               </Text>
             </View>
             <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
           </Pressable>
 
-          {/* Active Fleet Listings Section */}
-          <View style={{ marginTop: 6 }}>
-            <SectionTitle eyebrow="MANAGEMENT" title="My Active Vehicle Fleet" />
-          </View>
-
-          <View style={{ gap: 10 }}>
-            {hostCars.map((car) => (
-              <View
-                key={car.id}
-                style={[
-                  styles.fleetCarCard,
-                  { backgroundColor: colors.card, borderColor: colors.border },
-                ]}
-              >
-                <Image
-                  source={{ uri: car.image }}
-                  contentFit="cover"
-                  style={styles.fleetCarThumb}
-                />
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text numberOfLines={1} style={[styles.fleetCarTitle, { color: colors.foreground }]}>
-                    {car.brand} {car.model}
-                  </Text>
-                  <Text style={[styles.fleetPlate, { color: colors.mutedForeground }]}>
-                    Plate: {car.license_plate || 'REG-2023'} • {car.category}
-                  </Text>
-                  <Text style={[styles.fleetAddress, { color: colors.mutedForeground }]} numberOfLines={1}>
-                    📍 {car.address_text || car.location}
-                  </Text>
-                </View>
-                <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                  <View style={[styles.statusAvailablePill, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
-                    <Text style={{ color: '#10B981', fontSize: 11, fontWeight: '700' }}>
-                      AVAILABLE
-                    </Text>
-                  </View>
-                  <Text style={[styles.fleetPrice, { color: colors.foreground }]}>
-                    ${car.price_per_day || car.pricePerDay}/d
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-
-          {/* Action: List a New Vehicle */}
+          {/* Action: Add New Vehicle (Specification 2) */}
           <Pressable
-            onPress={() => router.push('/owner/onboard')}
+            accessibilityRole="button"
+            accessibilityLabel="Add New Vehicle"
+            onPress={() => router.push('/host/add-vehicle')}
             style={[styles.primaryActionBtn, { backgroundColor: colors.primary }]}
           >
             <Feather name="plus-circle" size={18} color="#FFFFFF" />
-            <Text style={styles.primaryActionBtnText}>List a New Vehicle</Text>
+            <Text style={styles.primaryActionBtnText}>Add New Vehicle</Text>
           </Pressable>
 
           {/* Sign Out CTA */}
@@ -807,7 +850,7 @@ export default function ProfileScreen() {
             onPress={handleSignOut}
             style={[
               styles.signOutBtn,
-              { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10 },
+              { backgroundColor: colors.card, borderColor: colors.border, marginTop: 4 },
             ]}
           >
             <Feather name="log-out" size={17} color={colors.destructive} />
@@ -831,7 +874,19 @@ export default function ProfileScreen() {
               },
             ]}
           >
-            <Avatar size={64} />
+            <View style={{ position: 'relative' }}>
+              <Avatar
+                uri={session.avatar || 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=400'}
+                size={68}
+              />
+              <Pressable
+                onPress={handleOpenEditProfile}
+                style={[styles.avatarCameraBadge, { backgroundColor: colors.primary, borderColor: colors.card }]}
+              >
+                <Feather name="camera" size={11} color="#FFFFFF" />
+              </Pressable>
+            </View>
+
             <View style={{ flex: 1, gap: 3 }}>
               <View style={styles.nameRow}>
                 <Text style={[styles.userNameText, { color: colors.foreground }]}>
@@ -850,14 +905,29 @@ export default function ProfileScreen() {
               <Text style={[styles.userPhoneText, { color: colors.mutedForeground }]}>
                 {session.phone || '+92 300 1234567'}
               </Text>
-            </View>
-
-            <View style={[styles.verifiedCheckBadge, { backgroundColor: 'rgba(177,18,38,0.12)' }]}>
-              <Feather name="check" size={14} color={colors.primary} />
+              <Text style={[styles.userAddressText, { color: colors.mutedForeground }]} numberOfLines={1}>
+                📍 {session.address || session.city || 'Islamabad, Pakistan'}
+              </Text>
             </View>
           </View>
 
-          {/* Renter Metric Stats */}
+          {/* Edit Profile Action Button (Specification 1) */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Edit Renter Profile"
+            onPress={handleOpenEditProfile}
+            style={[
+              styles.editProfilePillBtn,
+              { backgroundColor: colors.isDark ? '#1C232E' : '#F1F5F9', borderColor: colors.border },
+            ]}
+          >
+            <Feather name="edit-2" size={14} color={colors.foreground} />
+            <Text style={[styles.editProfilePillText, { color: colors.foreground }]}>
+              Edit Profile Details
+            </Text>
+          </Pressable>
+
+          {/* Renter Metric Stats: Total Booking Count & Favorites Count (Specification 1) */}
           <View
             style={[
               styles.metricsBar,
@@ -867,32 +937,46 @@ export default function ProfileScreen() {
               },
             ]}
           >
-            <View style={styles.metricItem}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="View All Trips"
+              onPress={() => router.push('/(tabs)/bookings')}
+              style={styles.metricItem}
+            >
               <Text style={[styles.metricVal, { color: colors.foreground }]}>
                 {renterBookings.length}
               </Text>
               <Text style={[styles.metricLabel, { color: colors.mutedForeground }]}>
-                My Trips
+                Total Bookings
               </Text>
-            </View>
+            </Pressable>
+
             <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />
-            <View style={styles.metricItem}>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="View Saved Wishlist"
+              onPress={() => router.push('/(tabs)/favorites')}
+              style={styles.metricItem}
+            >
               <Text style={[styles.metricVal, { color: colors.foreground }]}>
                 {favorites.length}
               </Text>
               <Text style={[styles.metricLabel, { color: colors.mutedForeground }]}>
-                Saved Cars
+                Favorites / Wishlist
               </Text>
-            </View>
+            </Pressable>
+
             <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />
-            <View style={styles.metricItem}>
+
+            {/* <View style={styles.metricItem}>
               <Text style={[styles.metricVal, { color: colors.foreground }]}>
                 2024
               </Text>
               <Text style={[styles.metricLabel, { color: colors.mutedForeground }]}>
                 Member Since
               </Text>
-            </View>
+            </View> */}
           </View>
 
           {/* ─── INFORMATIVE "BECOME A HOST" PARTNER BANNER ─── */}
@@ -915,7 +999,7 @@ export default function ProfileScreen() {
             </View>
 
             <Text style={[styles.becomeHostBody, { color: colors.mutedForeground }]}>
-              Want to earn money by listing your cars? In DriveFlex, host accounts are strictly separate from renter accounts for security and commercial compliance. You must create a dedicated Host account with verified vehicle details.
+              Want to earn money by listing your cars? Create a dedicated Host account with verified vehicle details.
             </Text>
 
             <Pressable
@@ -993,38 +1077,20 @@ export default function ProfileScreen() {
                 <Feather name="heart" size={16} color={colors.primary} />
               </View>
               <Text style={[styles.linkText, { color: colors.foreground }]}>
-                Saved Cars Collection
+                Saved Cars / Wishlist ({favorites.length})
               </Text>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>
 
             <Pressable
-              onPress={() => {
-                if (Platform.OS === 'web' && typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
-                  document.activeElement.blur();
-                }
-                router.push('/map');
-              }}
-              style={[styles.linkRow, { borderBottomColor: colors.border }]}
-            >
-              <View style={[styles.linkIconWrap, { backgroundColor: colors.secondary }]}>
-                <Feather name="map" size={16} color={colors.accent} />
-              </View>
-              <Text style={[styles.linkText, { color: colors.foreground }]}>
-                Interactive Fleet Map
-              </Text>
-              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-            </Pressable>
-
-            <Pressable
-              onPress={() => router.push('/contact')}
+              onPress={() => router.push('/update-password')}
               style={[styles.linkRow, { borderBottomWidth: 0 }]}
             >
-              <View style={[styles.linkIconWrap, { backgroundColor: colors.secondary }]}>
-                <Feather name="message-circle" size={16} color={colors.accent} />
+              <View style={[styles.linkIconWrap, { backgroundColor: 'rgba(177,18,38,0.12)' }]}>
+                <Feather name="lock" size={16} color={colors.primary} />
               </View>
               <Text style={[styles.linkText, { color: colors.foreground }]}>
-                DriveFlex Customer Support
+                Security & Update Password
               </Text>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>
@@ -1045,6 +1111,177 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
       )}
+
+      {/* ══════════════════════════════════════════════════════════════
+          EDIT PROFILE MODAL (SPECIFICATION 1: PROFILE PICTURE, NAME,
+          PHONE, EMAIL, AND LOCATION/ADDRESS MODIFICATION)
+          ══════════════════════════════════════════════════════════════ */}
+      <Modal
+        visible={editModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View
+            style={[
+              styles.editModalCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                  Edit Profile Information
+                </Text>
+                <Text style={[styles.modalSub, { color: colors.mutedForeground }]}>
+                  Update your contact details, profile picture, and location
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setEditModalVisible(false)}
+                style={[styles.closeModalBtn, { borderColor: colors.border }]}
+              >
+                <Feather name="x" size={18} color={colors.foreground} />
+              </Pressable>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 440 }}>
+              <View style={{ gap: 14, paddingVertical: 10 }}>
+                {/* Profile Picture Upload Section */}
+                <View style={{ alignItems: 'center', marginBottom: 6 }}>
+                  <View style={{ position: 'relative' }}>
+                    <Avatar uri={editAvatar} size={84} />
+                    <Pressable
+                      onPress={() => void handlePickEditAvatar()}
+                      style={[styles.editAvatarOverlayBadge, { backgroundColor: colors.primary }]}
+                    >
+                      <Feather name="camera" size={14} color="#FFFFFF" />
+                    </Pressable>
+                  </View>
+                  <Pressable
+                    onPress={() => void handlePickEditAvatar()}
+                    style={{ marginTop: 8 }}
+                  >
+                    <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>
+                      Change Profile Picture
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {/* Full Name */}
+                <View>
+                  <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+                    Full Name *
+                  </Text>
+                  <TextInput
+                    value={editName}
+                    onChangeText={setEditName}
+                    placeholder="Your legal full name"
+                    placeholderTextColor={colors.mutedForeground}
+                    style={[
+                      styles.modalInput,
+                      { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background },
+                    ]}
+                  />
+                </View>
+
+                {/* Host Business Name (if host) */}
+                {session?.role === 'host' && (
+                  <View>
+                    <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+                      Fleet / Business Name
+                    </Text>
+                    <TextInput
+                      value={editBusinessName}
+                      onChangeText={setEditBusinessName}
+                      placeholder="e.g. Royal Motors Lahore"
+                      placeholderTextColor={colors.mutedForeground}
+                      style={[
+                        styles.modalInput,
+                        { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background },
+                      ]}
+                    />
+                  </View>
+                )}
+
+                {/* Email Address */}
+                <View>
+                  <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+                    Email Address *
+                  </Text>
+                  <TextInput
+                    value={editEmail}
+                    onChangeText={setEditEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    placeholder="email@example.com"
+                    placeholderTextColor={colors.mutedForeground}
+                    style={[
+                      styles.modalInput,
+                      { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background },
+                    ]}
+                  />
+                </View>
+
+                {/* Phone Number */}
+                <View>
+                  <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+                    Phone Number
+                  </Text>
+                  <TextInput
+                    value={editPhone}
+                    onChangeText={setEditPhone}
+                    keyboardType="phone-pad"
+                    placeholder="+92 300 1234567"
+                    placeholderTextColor={colors.mutedForeground}
+                    style={[
+                      styles.modalInput,
+                      { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background },
+                    ]}
+                  />
+                </View>
+
+                {/* Location / Address */}
+                <View>
+                  <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+                    Location / City Address
+                  </Text>
+                  <TextInput
+                    value={editAddress}
+                    onChangeText={setEditAddress}
+                    placeholder="e.g. Gulberg III, Lahore, Pakistan"
+                    placeholderTextColor={colors.mutedForeground}
+                    style={[
+                      styles.modalInput,
+                      { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background },
+                    ]}
+                  />
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <Pressable
+                onPress={() => setEditModalVisible(false)}
+                style={[styles.cancelModalBtn, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.cancelModalText, { color: colors.foreground }]}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => void handleSaveProfile()}
+                disabled={savingProfile}
+                style={[styles.saveModalBtn, { backgroundColor: colors.primary }]}
+              >
+                <Text style={styles.saveModalText}>
+                  {savingProfile ? 'Saving...' : 'Save Profile Changes'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Page>
   );
 }
@@ -1333,64 +1570,116 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-  demoCredentialsBox: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 12,
-    marginBottom: 14,
-    gap: 10,
+  userAddressText: {
+    fontSize: 12,
+    marginTop: 2,
   },
-  demoBoxHeader: {
+  avatarCameraBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editProfilePillBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
-  demoBoxTitle: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-  demoCardsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  demoCard: {
-    flex: 1,
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
-    padding: 10,
-    gap: 4,
+    marginTop: -6,
   },
-  demoCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 2,
-  },
-  demoBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  demoBadgeText: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  demoActionText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  demoNameText: {
+  editProfilePillText: {
     fontSize: 13,
     fontWeight: '700',
   },
-  demoEmailText: {
-    fontSize: 11,
-    fontWeight: '500',
+  editAvatarOverlayBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  demoPassText: {
-    fontSize: 10.5,
-    marginTop: 1,
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  editModalCard: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  modalSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  closeModalBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  cancelModalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  cancelModalText: {
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  saveModalBtn: {
+    flex: 2,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  saveModalText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

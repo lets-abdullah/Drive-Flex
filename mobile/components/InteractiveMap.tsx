@@ -53,8 +53,18 @@ export function InteractiveMap({
   onOpenMap,
 }: InteractiveMapProps) {
   const colors = useColors();
-  const { currentCity, radiusKm, applyLocation, detectUserLocation, isLocating, openModal } =
-    useLocationFilter();
+  const {
+    currentCity,
+    radiusKm,
+    isFilterActive,
+    isModalOpen,
+    openModal,
+    closeModal,
+    applyLocation,
+    clearFilter,
+    detectUserLocation,
+    isLocating,
+  } = useLocationFilter();
 
   const [expanded, setExpanded] = useState(false);
   const [radiusPickerOpen, setRadiusPickerOpen] = useState(false);
@@ -64,19 +74,19 @@ export function InteractiveMap({
   const userGpsX = 180;
   const userGpsY = 100;
 
-  // Dynamic fleet cluster distribution calculated from live catalog vehicles
-  const lahoreCount = vehicles.filter((v) => v.location.toLowerCase().includes('lahore')).length || 4;
-  const isbCount = vehicles.filter((v) => v.location.toLowerCase().includes('islamabad')).length || 3;
-  const karachiCount = vehicles.filter((v) => v.location.toLowerCase().includes('karachi')).length || 4;
-  const multanCount = vehicles.filter((v) => v.location.toLowerCase().includes('multan')).length || 4;
+  // Dynamic fleet cluster distribution calculated from live catalog vehicles (5 cities x 6 brands = 6 per city)
+  const lahoreCount = vehicles.filter((v) => v.location.toLowerCase().includes('lahore')).length || 6;
+  const isbCount = vehicles.filter((v) => v.location.toLowerCase().includes('islamabad')).length || 6;
+  const rwpCount = vehicles.filter((v) => v.location.toLowerCase().includes('rawalpindi')).length || 6;
+  const karachiCount = vehicles.filter((v) => v.location.toLowerCase().includes('karachi')).length || 6;
+  const multanCount = vehicles.filter((v) => v.location.toLowerCase().includes('multan')).length || 6;
 
   const clusters: ClusterLocation[] = [
     { id: 'c-isb', name: 'Islamabad / F-7', x: 135, y: 46, count: isbCount },
-    { id: 'c-lahore', name: 'Lahore / Gulberg', x: 235, y: 72, count: lahoreCount },
-    { id: 'c-m2', name: 'M-2 Motorway Hub', x: 180, y: 92, count: Math.max(lahoreCount, isbCount) },
-    { id: 'c-multan', name: 'Multan Cantt', x: 285, y: 132, count: multanCount },
+    { id: 'c-rwp', name: 'Rawalpindi / Cantt', x: 180, y: 92, count: rwpCount },
+    { id: 'c-lahore', name: 'Lahore / Gulberg', x: 245, y: 72, count: lahoreCount },
+    { id: 'c-multan', name: 'Multan / Bosan Rd', x: 295, y: 132, count: multanCount },
     { id: 'c-karachi', name: 'Karachi / DHA', x: 75, y: 138, count: karachiCount },
-    { id: 'c-airport', name: 'Airport VIP Terminal', x: 320, y: 78, count: 5 },
   ];
 
   // Visual Radius Circle in SVG based on selected radius
@@ -95,7 +105,7 @@ export function InteractiveMap({
   };
 
   const handleCitySelect = (cityName: string) => {
-    const cleanCity = cityName.split('/')[0].trim();
+    const cleanCity = cityName.split('/')[0].replace('Cantt', '').trim();
     const matched = PAKISTAN_CITIES.find(
       (c) =>
         cleanCity.toLowerCase().includes(c.name.toLowerCase()) ||
@@ -674,6 +684,89 @@ export function InteractiveMap({
                       ]}
                     >
                       {opt} km
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ─── CITY PICKER MODAL ─── */}
+      <Modal
+        visible={isModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeModal}
+      >
+        <Pressable style={styles.modalOverlay} onPress={closeModal}>
+          <View
+            style={[
+              styles.radiusModalCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <View style={styles.radiusModalHeader}>
+              <Feather name="map-pin" size={18} color={colors.primary} />
+              <Text style={[styles.radiusModalTitle, { color: colors.foreground }]}>
+                Select City
+              </Text>
+            </View>
+            <Text style={[styles.radiusModalSub, { color: colors.mutedForeground }]}>
+              Each city features 1 car of every brand (6 brands per city)
+            </Text>
+
+            <View style={styles.radiusOptionsGrid}>
+              <Pressable
+                onPress={() => {
+                  clearFilter();
+                  closeModal();
+                }}
+                style={[
+                  styles.radiusOptionBtn,
+                  {
+                    backgroundColor: !isFilterActive ? colors.primary : colors.secondary,
+                    borderColor: !isFilterActive ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.radiusOptionText,
+                    {
+                      color: !isFilterActive ? '#FFFFFF' : colors.foreground,
+                      fontWeight: !isFilterActive ? '700' : '500',
+                    },
+                  ]}
+                >
+                  All Cities
+                </Text>
+              </Pressable>
+              {PAKISTAN_CITIES.map((city) => {
+                const isSelected = isFilterActive && currentCity.name === city.name;
+                return (
+                  <Pressable
+                    key={city.name}
+                    onPress={() => applyLocation(city, radiusKm)}
+                    style={[
+                      styles.radiusOptionBtn,
+                      {
+                        backgroundColor: isSelected ? colors.primary : colors.secondary,
+                        borderColor: isSelected ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.radiusOptionText,
+                        {
+                          color: isSelected ? '#FFFFFF' : colors.foreground,
+                          fontWeight: isSelected ? '700' : '500',
+                        },
+                      ]}
+                    >
+                      {city.name}
                     </Text>
                   </Pressable>
                 );

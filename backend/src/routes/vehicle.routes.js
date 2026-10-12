@@ -15,4 +15,10 @@ router.get('/:id/status', VehicleController.getVehicleStatus);
 // GET /api/vehicles/:id - Single vehicle with live booking details
 router.get('/:id', VehicleController.getVehicleByIdOrSlug);
 
+// PATCH /api/vehicles/:id - Update vehicle details or status
+router.patch('/:id', VehicleController.updateVehicle);
+
+// DELETE /api/vehicles/:id - Permanently delete vehicle from fleet
+router.delete('/:id', VehicleController.deleteVehicle);
+
 module.exports = router;

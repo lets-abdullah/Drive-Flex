@@ -85,6 +85,45 @@ const VehicleController = {
       next(err);
     }
   },
+
+  updateVehicle: async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const updated = await VehicleService.updateVehicle(id, req.body);
+      if (!updated) {
+        return res.status(404).json({
+          success: false,
+          message: 'Vehicle not found',
+        });
+      }
+      res.json({
+        success: true,
+        message: 'Vehicle updated successfully',
+        data: updated,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  deleteVehicle: async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const deleted = await VehicleService.deleteVehicle(id);
+      if (!deleted) {
+        return res.status(404).json({
+          success: false,
+          message: 'Vehicle not found',
+        });
+      }
+      res.json({
+        success: true,
+        message: 'Vehicle deleted successfully',
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
 };
 
 module.exports = VehicleController;

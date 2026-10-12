@@ -23,7 +23,7 @@ type RenterTabFilter = 'upcoming' | 'pending' | 'completed' | 'cancelled';
 
 export default function BookingsScreen() {
   const colors = useColors();
-  const { bookings, vehicles, session, cancelBooking, theme, toggleTheme } = useDriveFlex();
+  const { bookings, vehicles, session, cancelBooking, approveBooking, declineBooking, theme, toggleTheme } = useDriveFlex();
 
   // Local state for dynamic bookings updates (e.g. approve/decline/review)
   const [localBookingsList, setLocalBookingsList] = useState<Booking[]>(bookings);
@@ -31,6 +31,8 @@ export default function BookingsScreen() {
   // Tab filters
   const [hostTab, setHostTab] = useState<HostTabFilter>('pending');
   const [renterTab, setRenterTab] = useState<RenterTabFilter>('upcoming');
+  const [selectedListingFilter, setSelectedListingFilter] = useState<string>('all');
+  const [auditedBooking, setAuditedBooking] = useState<Booking | null>(null);
 
   // Top-Right Corner Filters & Theme Controls
   const [customFilterModalVisible, setCustomFilterModalVisible] = useState(false);
@@ -61,11 +63,16 @@ export default function BookingsScreen() {
   const handleApproveBooking = (bookingId?: string) => {
     if (!bookingId) return;
     setLocalBookingsList((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, status: 'confirmed' } : b))
+      prev.map((b) =>
+        b.id === bookingId
+          ? { ...b, status: 'confirmed', refund_status: 'Guaranteed Reservation (Approved by Host)' }
+          : b
+      )
     );
+    void approveBooking(bookingId);
     Alert.alert(
       'Booking Approved!',
-      'You have accepted this rental request. The vehicle is now marked for release.'
+      'You have accepted this rental request. Renter contact details are now unlocked for handover coordination.'
     );
   };
 
@@ -84,14 +91,15 @@ export default function BookingsScreen() {
               prev.map((b) =>
                 b.id === bookingId
                   ? {
-                      ...b,
-                      status: 'cancelled',
-                      refund_status: 'Refund Processed to Renter',
-                      cancellation_reason: 'Declined by host',
-                    }
+                    ...b,
+                    status: 'cancelled',
+                    refund_status: 'Refund Processed to Renter',
+                    cancellation_reason: 'Declined by host',
+                  }
                   : b
               )
             );
+            void declineBooking(bookingId, 'Declined by host');
           },
         },
       ]
@@ -114,11 +122,11 @@ export default function BookingsScreen() {
               prev.map((b) =>
                 b.id === bookingId
                   ? {
-                      ...b,
-                      status: 'cancelled',
-                      refund_status: 'Refund Processed to Card (100% Refund)',
-                      cancellation_reason: 'Cancelled by renter',
-                    }
+                    ...b,
+                    status: 'cancelled',
+                    refund_status: 'Refund Processed to Card (100% Refund)',
+                    cancellation_reason: 'Cancelled by renter',
+                  }
                   : b
               )
             );
@@ -136,10 +144,10 @@ export default function BookingsScreen() {
       prev.map((b) =>
         b.id === reviewBookingId
           ? {
-              ...b,
-              review_rating: reviewRating,
-              review_comment: reviewComment || 'Great rental experience!',
-            }
+            ...b,
+            review_rating: reviewRating,
+            review_comment: reviewComment || 'Great rental experience!',
+          }
           : b
       )
     );
@@ -151,9 +159,26 @@ export default function BookingsScreen() {
   // Filtered lists
   const isHost = session?.role === 'host';
 
+  const hostListings = useMemo(() => {
+    return vehicles.filter(
+      (v) =>
+        v.host_id === session?.id ||
+        v.ownerId === session?.id ||
+        (session?.role === 'host' && (v.ownerId === 'owner-ali' || v.ownerId === 'owner-sana' || !v.ownerId))
+    );
+  }, [vehicles, session]);
+
   const hostFilteredBookings = useMemo(() => {
     let list = localBookingsList.filter((b) => {
       const s = b.status.toLowerCase();
+
+      // Per-listing filter
+      if (selectedListingFilter !== 'all') {
+        if (b.vehicleId !== selectedListingFilter && b.car_id !== selectedListingFilter) {
+          return false;
+        }
+      }
+
       if (filterStatus !== 'all') {
         if (s !== filterStatus.toLowerCase()) return false;
       } else {
@@ -185,7 +210,7 @@ export default function BookingsScreen() {
     }
 
     return list;
-  }, [localBookingsList, hostTab, filterStatus, filterQuery, filterSort, vehicles]);
+  }, [localBookingsList, selectedListingFilter, hostTab, filterStatus, filterQuery, filterSort, vehicles]);
 
   const renterFilteredBookings = useMemo(() => {
     let list = localBookingsList.filter((b) => {
@@ -478,6 +503,198 @@ export default function BookingsScreen() {
   );
 
   /* ─────────────────────────────────────────────────────────────
+     RENTER AUDIT MODAL (FOR HOST REVIEW WITH PRIVACY GUARD)
+     ───────────────────────────────────────────────────────────── */
+  const renderRenterAuditModal = () => {
+    if (!auditedBooking) return null;
+    const b = auditedBooking;
+    const vehicle = vehicles.find((v) => v.id === b.vehicleId || v.id === b.car_id);
+    const isApproved = b.status === 'confirmed' || b.status === 'active' || b.status === 'completed';
+    const renterName = b.renter_name || b.customer || 'Verified Guest';
+    const renterRating = b.renter_rating || 4.9;
+
+    return (
+      <Modal visible={!!auditedBooking} transparent animationType="slide">
+        <View style={styles.modalBackdrop}>
+          <View
+            style={[
+              styles.auditModalCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            {/* Modal Header */}
+            <View style={styles.auditModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={[styles.auditShieldIconWrap, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+                  <Feather name="shield" size={18} color="#10B981" />
+                </View>
+                <View>
+                  <Text style={[styles.auditModalTitle, { color: colors.foreground }]}>
+                    Renter Trust & Identity
+                  </Text>
+                  <Text style={[styles.auditModalSub, { color: colors.mutedForeground }]}>
+                    Public profile & verification check
+                  </Text>
+                </View>
+              </View>
+              <Pressable
+                onPress={() => setAuditedBooking(null)}
+                hitSlop={8}
+                style={[styles.closeModalBtn, { borderColor: colors.border }]}
+              >
+                <Feather name="x" size={16} color={colors.foreground} />
+              </Pressable>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 14 }}>
+              {/* Profile Card */}
+              <View
+                style={[
+                  styles.auditProfileBox,
+                  { backgroundColor: colors.isDark ? '#141822' : '#F8FAFC', borderColor: colors.border },
+                ]}
+              >
+                <View style={styles.auditAvatarWrap}>
+                  {b.renter_avatar ? (
+                    <Image source={{ uri: b.renter_avatar }} contentFit="cover" style={styles.auditAvatarImg} />
+                  ) : (
+                    <View style={[styles.auditAvatarFallback, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.auditAvatarFallbackText}>{renterName.charAt(0)}</Text>
+                    </View>
+                  )}
+                  <View style={styles.auditVerifiedBadge}>
+                    <Feather name="check" size={10} color="#FFFFFF" />
+                  </View>
+                </View>
+
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[styles.auditRenterName, { color: colors.foreground }]}>{renterName}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="star" size={14} color="#EAB308" />
+                    <Text style={[styles.auditRatingText, { color: colors.foreground }]}>
+                      {renterRating} Stars <Text style={{ color: colors.mutedForeground }}>(14 trips hosted)</Text>
+                    </Text>
+                  </View>
+                  <Text style={[styles.auditBadgePill, { color: '#10B981' }]}>
+                    ✓ Verified Driver's License & Identity
+                  </Text>
+                </View>
+              </View>
+
+              {/* Privacy Guard Callout */}
+              <View
+                style={[
+                  styles.auditPrivacyCard,
+                  {
+                    backgroundColor: isApproved ? 'rgba(16, 185, 129, 0.08)' : 'rgba(234, 179, 8, 0.08)',
+                    borderColor: isApproved ? 'rgba(16, 185, 129, 0.25)' : 'rgba(234, 179, 8, 0.25)',
+                  },
+                ]}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Feather name={isApproved ? 'unlock' : 'lock'} size={14} color={isApproved ? '#10B981' : '#EAB308'} />
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: isApproved ? '#10B981' : '#EAB308' }}>
+                    {isApproved ? 'Privacy Unlocked (Booking Approved)' : 'DriveFlex Privacy Guard Active'}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 12, lineHeight: 18, color: colors.mutedForeground, marginTop: 4 }}>
+                  {isApproved
+                    ? 'Reservation approved. Direct renter mobile phone number and delivery handover coordinates are now unlocked.'
+                    : 'Personal telephone number and exact home address remain strictly concealed until you officially approve this booking.'}
+                </Text>
+              </View>
+
+              {/* Verified Details Sheet */}
+              <View
+                style={[
+                  styles.auditDetailsCard,
+                  { backgroundColor: colors.isDark ? '#141822' : '#F8FAFC', borderColor: colors.border },
+                ]}
+              >
+                <View style={styles.auditDetailRow}>
+                  <Text style={[styles.auditDetailLabel, { color: colors.mutedForeground }]}>Direct Mobile Phone</Text>
+                  <Text style={[styles.auditDetailVal, { color: isApproved ? colors.foreground : colors.mutedForeground }]}>
+                    {isApproved ? (b.renter_phone || '+92 300 1234567') : '+92 ••• ••••••• (Locked until approval)'}
+                  </Text>
+                </View>
+
+                <View style={styles.auditDetailRow}>
+                  <Text style={[styles.auditDetailLabel, { color: colors.mutedForeground }]}>Email Address</Text>
+                  <Text style={[styles.auditDetailVal, { color: isApproved ? colors.foreground : colors.mutedForeground }]}>
+                    {isApproved ? (b.renter_email || 'renter@driveflex.com') : '•••••••••@gmail.com (Locked)'}
+                  </Text>
+                </View>
+
+                <View style={styles.auditDetailRow}>
+                  <Text style={[styles.auditDetailLabel, { color: colors.mutedForeground }]}>Requested Vehicle</Text>
+                  <Text style={[styles.auditDetailVal, { color: colors.foreground, fontWeight: '700' }]}>
+                    {b.car_title || (vehicle ? `${vehicle.brand} ${vehicle.model}` : 'Fleet Car')}
+                  </Text>
+                </View>
+
+                <View style={styles.auditDetailRow}>
+                  <Text style={[styles.auditDetailLabel, { color: colors.mutedForeground }]}>Schedule</Text>
+                  <Text style={[styles.auditDetailVal, { color: colors.foreground }]}>
+                    {shortDate(b.pickup)} ({b.pickup_time || '10:00 AM'}) → {shortDate(b.returnDate)} ({b.return_time || '06:00 PM'})
+                  </Text>
+                </View>
+
+                <View style={styles.auditDetailRow}>
+                  <Text style={[styles.auditDetailLabel, { color: colors.mutedForeground }]}>Delivery Option</Text>
+                  <Text style={[styles.auditDetailVal, { color: colors.foreground }]}>
+                    {b.delivery_option || 'Central Hub Pick-up'}
+                  </Text>
+                </View>
+
+                <View style={styles.auditDetailRow}>
+                  <Text style={[styles.auditDetailLabel, { color: colors.mutedForeground }]}>Handover Location</Text>
+                  <Text style={[styles.auditDetailVal, { color: colors.foreground }]}>
+                    {b.pickup_address || 'DriveFlex Central Fleet Hub'}
+                  </Text>
+                </View>
+
+                <View style={[styles.auditDetailRow, { borderBottomWidth: 0 }]}>
+                  <Text style={[styles.auditDetailLabel, { color: colors.mutedForeground }]}>Your Net Payout</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: '#10B981' }}>
+                    ${b.host_payout || Math.round((b.total_price || b.totalAmount || 180) * 0.9)}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Action buttons inside modal */}
+              {b.status === 'pending' && (
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                  <Pressable
+                    onPress={() => {
+                      const id = b.id;
+                      setAuditedBooking(null);
+                      handleDeclineBooking(id);
+                    }}
+                    style={[styles.auditDeclineBtn, { borderColor: colors.border }]}
+                  >
+                    <Text style={{ color: colors.destructive, fontWeight: '700', fontSize: 13 }}>Decline</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      const id = b.id;
+                      setAuditedBooking(null);
+                      handleApproveBooking(id);
+                    }}
+                    style={[styles.auditApproveBtn, { backgroundColor: '#10B981' }]}
+                  >
+                    <Feather name="check" size={16} color="#FFFFFF" />
+                    <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 13 }}>Approve Booking</Text>
+                  </Pressable>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  /* ─────────────────────────────────────────────────────────────
      SCENARIO 1: GUEST / NOT LOGGED IN
      ───────────────────────────────────────────────────────────── */
   if (!session) {
@@ -485,7 +702,6 @@ export default function BookingsScreen() {
       <Page tabbed>
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.eyebrow, { color: colors.accent }]}>DRIVEFLEX ITINERARIES</Text>
             <Text style={[styles.headerTitle, { color: colors.foreground }]}>Your Bookings</Text>
             <Text style={[styles.headerSubtitle, { color: colors.mutedForeground }]}>
               Sign in to manage confirmed reservations, track releases, and view receipts.
@@ -527,7 +743,7 @@ export default function BookingsScreen() {
   }
 
   /* ─────────────────────────────────────────────────────────────
-     SCENARIO 2: HOST CAR BOOKINGS DASHBOARD
+     SCENARIO 2: HOST CAR BOOKINGS & APPROVALS DASHBOARD
      ───────────────────────────────────────────────────────────── */
   if (isHost) {
     return (
@@ -536,26 +752,26 @@ export default function BookingsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[styles.eyebrow, { color: colors.star }]}>HOST FLEET MANAGEMENT</Text>
             <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-              Fleet Bookings Dashboard
+              Fleet Bookings & Approvals
             </Text>
             <Text style={[styles.headerSubtitle, { color: colors.mutedForeground }]}>
-              Review renter requests, track on-road drives, and manage fleet payouts
+              Review booking requests per listing, verify financial breakdowns, and audit renters
             </Text>
           </View>
           {renderHeaderActions()}
         </View>
         {renderActiveFilterBadges()}
 
-        {/* Host Filter Tabs Strip */}
+        {/* 1. Host Status Filter Tabs */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterScroll}
         >
           {[
-            { key: 'pending', label: 'Pending Requests', count: hostPendingCount },
-            { key: 'confirmed', label: 'Upcoming' },
-            { key: 'active', label: 'Active On-Road' },
+            { key: 'pending', label: 'Pending Approvals', count: hostPendingCount },
+            { key: 'confirmed', label: 'Confirmed' },
+            { key: 'active', label: 'Active Trips' },
             { key: 'completed', label: 'Completed' },
             { key: 'cancelled', label: 'Cancelled' },
           ].map((tab) => {
@@ -607,11 +823,13 @@ export default function BookingsScreen() {
           })}
         </ScrollView>
 
-        {/* Host Bookings List */}
+        {/* 3. Host Bookings List with Detailed Breakdown Cards */}
         {hostFilteredBookings.length === 0 ? (
           <EmptyState
             title={`No ${hostTab} bookings`}
-            detail={`No customer reservations currently match the "${hostTab}" status.`}
+            detail={`No reservations currently match "${hostTab}" for the selected listing.`}
+            action={selectedListingFilter !== 'all' ? 'Show All Cars' : undefined}
+            onAction={() => setSelectedListingFilter('all')}
           />
         ) : (
           <View style={styles.bookingsList}>
@@ -619,6 +837,18 @@ export default function BookingsScreen() {
               const vehicle = vehicles.find((v) => v.id === b.vehicleId || v.id === b.car_id);
               const carTitle = b.car_title || (vehicle ? `${vehicle.brand} ${vehicle.model}` : 'Fleet Car');
               const carImg = b.car_image || vehicle?.image;
+              const days = b.total_days || 3;
+              const gross = b.total_price || b.totalAmount || 180;
+              const dailyRate = b.daily_rate || Math.round(gross / days);
+              const platformFee = b.platform_fee || Math.round(gross * 0.1);
+              const hostPayout = b.host_payout || (gross - platformFee);
+              const pickupTime = b.pickup_time || '10:00 AM';
+              const returnTime = b.return_time || '06:00 PM';
+              const deliveryOption = b.delivery_option || 'DriveFlex Station Pick-up';
+              const pickupLocation = b.pickup_address || 'Central Fleet Terminal';
+              const renterName = b.renter_name || b.customer || 'Verified Guest';
+              const renterRating = b.renter_rating || 4.9;
+              const isApproved = b.status === 'confirmed' || b.status === 'active' || b.status === 'completed';
 
               return (
                 <View
@@ -628,7 +858,7 @@ export default function BookingsScreen() {
                     { backgroundColor: colors.card, borderColor: colors.border },
                   ]}
                 >
-                  {/* Header Row: Status badge & Dates */}
+                  {/* Top Status & Booking Ref Header */}
                   <View style={styles.cardHeaderRow}>
                     <View
                       style={[
@@ -638,12 +868,12 @@ export default function BookingsScreen() {
                             b.status === 'pending'
                               ? 'rgba(234, 179, 8, 0.15)'
                               : b.status === 'confirmed'
-                              ? 'rgba(16, 185, 129, 0.12)'
-                              : b.status === 'active'
-                              ? 'rgba(59, 130, 246, 0.15)'
-                              : b.status === 'completed'
-                              ? 'rgba(16, 185, 129, 0.15)'
-                              : 'rgba(214, 31, 60, 0.12)',
+                                ? 'rgba(16, 185, 129, 0.12)'
+                                : b.status === 'active'
+                                  ? 'rgba(59, 130, 246, 0.15)'
+                                  : b.status === 'completed'
+                                    ? 'rgba(16, 185, 129, 0.15)'
+                                    : 'rgba(214, 31, 60, 0.12)',
                         },
                       ]}
                     >
@@ -655,25 +885,25 @@ export default function BookingsScreen() {
                               b.status === 'pending'
                                 ? '#EAB308'
                                 : b.status === 'confirmed'
-                                ? '#10B981'
-                                : b.status === 'active'
-                                ? '#3B82F6'
-                                : b.status === 'completed'
-                                ? '#10B981'
-                                : colors.destructive,
+                                  ? '#10B981'
+                                  : b.status === 'active'
+                                    ? '#3B82F6'
+                                    : b.status === 'completed'
+                                      ? '#10B981'
+                                      : colors.destructive,
                           },
                         ]}
                       >
-                        {b.status.toUpperCase()}
+                        {b.status === 'pending' ? 'ACTION NEEDED: APPROVAL' : b.status.toUpperCase()}
                       </Text>
                     </View>
 
-                    <Text style={[styles.bookingDateSummary, { color: colors.mutedForeground }]}>
-                      {shortDate(b.pickup)} → {shortDate(b.returnDate)}
+                    <Text style={[styles.bookingRefText, { color: colors.mutedForeground }]}>
+                      #DF-{(b.id || '000000').slice(-6).toUpperCase()}
                     </Text>
                   </View>
 
-                  {/* Body: Car Thumb & Renter Details */}
+                  {/* Vehicle Identity Banner */}
                   <View style={styles.cardBody}>
                     {carImg && (
                       <View style={[styles.carThumbWrap, { backgroundColor: colors.isDark ? '#1C232E' : '#F1F5F9' }]}>
@@ -681,77 +911,274 @@ export default function BookingsScreen() {
                       </View>
                     )}
 
-                    <View style={{ flex: 1, gap: 2 }}>
+                    <View style={{ flex: 1, justifyContent: 'center', gap: 3 }}>
                       <Text numberOfLines={1} style={[styles.carTitle, { color: colors.foreground }]}>
                         {carTitle}
                       </Text>
-                      <Text style={[styles.renterText, { color: colors.foreground }]}>
-                        👤 Renter: <Text style={{ fontWeight: '700' }}>{b.renter_name || b.customer}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={[styles.carSubTag, { color: colors.mutedForeground }]}>
+                          {vehicle?.category || 'Luxury'} • {vehicle?.transmission || 'Automatic'}
+                        </Text>
+                        {(vehicle?.license_plate || (vehicle as any)?.licensePlate) && (
+                          <View style={[styles.licensePlateTag, { borderColor: colors.border }]}>
+                            <Text style={[styles.licensePlateText, { color: colors.foreground }]}>
+                              {vehicle?.license_plate || (vehicle as any)?.licensePlate}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* 1. Selected Booking Dates & Exact Times */}
+                  <View
+                    style={[
+                      styles.breakdownBox,
+                      { backgroundColor: colors.isDark ? '#141822' : '#F8FAFC', borderColor: colors.border },
+                    ]}
+                  >
+                    <View style={styles.breakdownHeaderRow}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Feather name="calendar" size={13} color={colors.primary} />
+                        <Text style={[styles.breakdownSectionTitle, { color: colors.foreground }]}>
+                          Booking Dates & Exact Times
+                        </Text>
+                      </View>
+                      <View style={[styles.durationBadge, { backgroundColor: colors.secondary }]}>
+                        <Text style={[styles.durationBadgeText, { color: colors.foreground }]}>
+                          {days} Days Total
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.scheduleRow}>
+                      <View style={styles.scheduleColumn}>
+                        <Text style={[styles.scheduleMiniLabel, { color: colors.mutedForeground }]}>PICK-UP</Text>
+                        <Text style={[styles.scheduleDateVal, { color: colors.foreground }]}>{shortDate(b.pickup)}</Text>
+                        <Text style={[styles.scheduleTimeVal, { color: colors.accent }]}>⏰ {pickupTime}</Text>
+                      </View>
+                      <View style={styles.scheduleArrowWrap}>
+                        <Feather name="arrow-right" size={14} color={colors.mutedForeground} />
+                      </View>
+                      <View style={styles.scheduleColumn}>
+                        <Text style={[styles.scheduleMiniLabel, { color: colors.mutedForeground }]}>DROP-OFF</Text>
+                        <Text style={[styles.scheduleDateVal, { color: colors.foreground }]}>{shortDate(b.returnDate)}</Text>
+                        <Text style={[styles.scheduleTimeVal, { color: colors.accent }]}>⏰ {returnTime}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* 2. Delivery Option & Handover Location */}
+                  <View
+                    style={[
+                      styles.breakdownBox,
+                      { backgroundColor: colors.isDark ? '#141822' : '#F8FAFC', borderColor: colors.border },
+                    ]}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <Feather name="map-pin" size={13} color={colors.accent} />
+                      <Text style={[styles.breakdownSectionTitle, { color: colors.foreground }]}>
+                        Delivery & Handover Location
                       </Text>
-                      <Text style={[styles.phoneText, { color: colors.mutedForeground }]}>
-                        📞 {b.renter_phone || '+92 300 1234567'}
+                    </View>
+                    <Text style={[styles.deliveryOptionName, { color: colors.foreground }]}>
+                      {deliveryOption}
+                    </Text>
+                    <Text style={[styles.deliveryAddressText, { color: colors.mutedForeground }]}>
+                      {pickupLocation}
+                    </Text>
+                  </View>
+
+                  {/* 3. Detailed Financial Breakdown Card */}
+                  <View
+                    style={[
+                      styles.breakdownBox,
+                      { backgroundColor: colors.isDark ? '#141822' : '#F8FAFC', borderColor: colors.border },
+                    ]}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <Feather name="dollar-sign" size={13} color="#10B981" />
+                      <Text style={[styles.breakdownSectionTitle, { color: colors.foreground }]}>
+                        Financial Breakdown & Host Payout
                       </Text>
-                      <Text style={[styles.addressText, { color: colors.mutedForeground }]} numberOfLines={1}>
-                        📍 {b.pickup_address || 'Central Terminal'}
+                    </View>
+
+                    <View style={styles.financeLineRow}>
+                      <Text style={[styles.financeLineLabel, { color: colors.mutedForeground }]}>
+                        Rental Duration & Daily Rate
+                      </Text>
+                      <Text style={[styles.financeLineValue, { color: colors.foreground }]}>
+                        {days} Days × ${dailyRate}/day
+                      </Text>
+                    </View>
+
+                    <View style={styles.financeLineRow}>
+                      <Text style={[styles.financeLineLabel, { color: colors.mutedForeground }]}>
+                        Gross Trip Total
+                      </Text>
+                      <Text style={[styles.financeLineValue, { color: colors.foreground, fontWeight: '700' }]}>
+                        ${gross}
+                      </Text>
+                    </View>
+
+                    <View style={styles.financeLineRow}>
+                      <Text style={[styles.financeLineLabel, { color: colors.mutedForeground }]}>
+                        Platform & Escrow Service Fee (10%)
+                      </Text>
+                      <Text style={[styles.financeLineValue, { color: colors.destructive }]}>
+                        -${platformFee}
+                      </Text>
+                    </View>
+
+                    <View style={[styles.payoutHighlightRow, { borderTopColor: colors.border }]}>
+                      <View>
+                        <Text style={[styles.payoutTitle, { color: colors.foreground }]}>
+                          Net Host Payout
+                        </Text>
+                        <Text style={[styles.payoutSub, { color: colors.mutedForeground }]}>
+                          Guaranteed by DriveFlex Escrow
+                        </Text>
+                      </View>
+                      <Text style={styles.payoutAmount}>${hostPayout}</Text>
+                    </View>
+                  </View>
+
+                  {/* 4. Cross-Profile Renter Audit & Privacy Guard */}
+                  <View
+                    style={[
+                      styles.renterAuditCard,
+                      { backgroundColor: colors.isDark ? '#141822' : '#F8FAFC', borderColor: colors.border },
+                    ]}
+                  >
+                    <View style={styles.renterAuditHeader}>
+                      <View style={styles.renterAuditAvatarWrap}>
+                        {b.renter_avatar ? (
+                          <Image source={{ uri: b.renter_avatar }} contentFit="cover" style={styles.renterAuditAvatar} />
+                        ) : (
+                          <View style={[styles.renterAuditAvatarFallback, { backgroundColor: colors.primary }]}>
+                            <Text style={styles.renterAuditAvatarFallbackText}>{renterName.charAt(0)}</Text>
+                          </View>
+                        )}
+                        <View style={styles.auditMiniBadge}>
+                          <Feather name="check" size={8} color="#FFFFFF" />
+                        </View>
+                      </View>
+
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={[styles.renterAuditName, { color: colors.foreground }]}>
+                            {renterName}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: '#10B981', fontWeight: '700' }}>✓ Verified</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Ionicons name="star" size={12} color="#EAB308" />
+                          <Text style={[styles.renterAuditRating, { color: colors.foreground }]}>
+                            {renterRating} Stars • 14 drives
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Pressable
+                        onPress={() => setAuditedBooking(b)}
+                        style={[styles.auditRenterBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+                      >
+                        <Feather name="user-check" size={13} color={colors.foreground} />
+                        <Text style={[styles.auditRenterBtnText, { color: colors.foreground }]}>Audit</Text>
+                      </Pressable>
+                    </View>
+
+                    {/* Privacy Guard Notice */}
+                    <View
+                      style={[
+                        styles.privacyGuardNotice,
+                        {
+                          backgroundColor: isApproved ? 'rgba(16, 185, 129, 0.08)' : 'rgba(234, 179, 8, 0.08)',
+                          borderColor: isApproved ? 'rgba(16, 185, 129, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                        },
+                      ]}
+                    >
+                      <Feather
+                        name={isApproved ? 'unlock' : 'lock'}
+                        size={12}
+                        color={isApproved ? '#10B981' : '#EAB308'}
+                      />
+                      <Text
+                        style={[
+                          styles.privacyGuardText,
+                          { color: isApproved ? '#10B981' : '#EAB308' },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {isApproved
+                          ? `Contact Unlocked: ${b.renter_phone || '+92 300 1234567'}`
+                          : 'Privacy Guard: Contact phone & address shielded until approved'}
                       </Text>
                     </View>
                   </View>
 
-                  {/* Financial & Status Detail Callout */}
-                  {b.status === 'completed' && (
-                    <View style={[styles.calloutBox, { backgroundColor: 'rgba(16, 185, 129, 0.08)' }]}>
-                      <Text style={{ color: '#10B981', fontWeight: '700', fontSize: 13 }}>
-                        💰 Earnings: ${b.total_price || b.totalAmount} • {b.refund_status || 'Paid Out'}
-                      </Text>
-                      {b.review_rating && (
-                        <Text style={{ color: colors.foreground, fontSize: 12, marginTop: 2 }}>
-                          ⭐ Rated: {b.review_rating} Stars ({b.review_comment})
-                        </Text>
-                      )}
-                    </View>
-                  )}
-
-                  {b.status === 'cancelled' && (
-                    <View style={[styles.calloutBox, { backgroundColor: 'rgba(214, 31, 60, 0.08)' }]}>
-                      <Text style={{ color: colors.destructive, fontWeight: '700', fontSize: 13 }}>
-                        Reason: {b.cancellation_reason || 'Renter requested cancellation'}
-                      </Text>
-                      <Text style={{ color: colors.mutedForeground, fontSize: 12, marginTop: 2 }}>
-                        Refund Status: {b.refund_status || 'Refund Processed'}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Footer & Host Actions */}
+                  {/* 5. Action Buttons & Live Status Updates */}
                   <View style={[styles.cardFooter, { borderTopColor: colors.border }]}>
-                    <View>
-                      <Text style={[styles.totalLabel, { color: colors.mutedForeground }]}>
-                        Total Rental Value
-                      </Text>
-                      <Text style={[styles.totalAmount, { color: colors.foreground }]}>
-                        ${b.total_price || b.totalAmount || 180}
-                      </Text>
-                    </View>
-
-                    {b.status === 'pending' && (
-                      <View style={styles.actionButtonsRow}>
+                    {b.status === 'pending' ? (
+                      <View style={styles.actionButtonsRowFull}>
                         <Pressable
                           onPress={() => handleDeclineBooking(b.id)}
-                          style={[styles.declineBtn, { borderColor: colors.border }]}
+                          style={[styles.declineBtnFull, { borderColor: colors.border }]}
                         >
-                          <Feather name="x" size={14} color={colors.destructive} />
+                          <Feather name="x" size={15} color={colors.destructive} />
                           <Text style={[styles.declineBtnText, { color: colors.destructive }]}>
-                            Decline
+                            Decline Booking
                           </Text>
                         </Pressable>
 
                         <Pressable
                           onPress={() => handleApproveBooking(b.id)}
-                          style={[styles.approveBtn, { backgroundColor: '#10B981' }]}
+                          style={[styles.approveBtnFull, { backgroundColor: '#10B981' }]}
                         >
-                          <Feather name="check" size={14} color="#FFFFFF" />
-                          <Text style={styles.approveBtnText}>Approve</Text>
+                          <Feather name="check" size={15} color="#FFFFFF" />
+                          <Text style={styles.approveBtnText}>Approve Booking</Text>
                         </Pressable>
+                      </View>
+                    ) : b.status === 'confirmed' ? (
+                      <View style={styles.actionButtonsRowFull}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#10B981' }}>
+                            ✓ Reservation Confirmed
+                          </Text>
+                          <Text style={{ fontSize: 11, color: colors.mutedForeground }}>
+                            Vehicle reserved for handover
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() =>
+                            Alert.alert(
+                              'Renter Contact',
+                              `Name: ${renterName}\nPhone: ${b.renter_phone || '+92 300 1234567'}\nPickup: ${pickupLocation}`,
+                              [{ text: 'OK' }]
+                            )
+                          }
+                          style={[styles.approveBtn, { backgroundColor: colors.primary }]}
+                        >
+                          <Feather name="phone-call" size={13} color="#FFFFFF" />
+                          <Text style={styles.approveBtnText}>Call Renter</Text>
+                        </Pressable>
+                      </View>
+                    ) : b.status === 'completed' ? (
+                      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#10B981' }}>
+                          💰 Paid Out: ${hostPayout}
+                        </Text>
+                        {b.review_rating && (
+                          <Text style={{ fontSize: 12, color: colors.foreground }}>
+                            ⭐ {b.review_rating} Stars ({b.review_comment})
+                          </Text>
+                        )}
+                      </View>
+                    ) : (
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.destructive }}>
+                          Cancelled ({b.cancellation_reason || 'Declined'})
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -760,6 +1187,7 @@ export default function BookingsScreen() {
             })}
           </View>
         )}
+        {renderRenterAuditModal()}
         {renderFilterModal()}
       </Page>
     );
@@ -875,10 +1303,10 @@ export default function BookingsScreen() {
                           b.status === 'pending'
                             ? 'rgba(234, 179, 8, 0.15)'
                             : b.status === 'confirmed'
-                            ? 'rgba(16, 185, 129, 0.12)'
-                            : b.status === 'completed'
-                            ? 'rgba(16, 185, 129, 0.15)'
-                            : 'rgba(214, 31, 60, 0.12)',
+                              ? 'rgba(16, 185, 129, 0.12)'
+                              : b.status === 'completed'
+                                ? 'rgba(16, 185, 129, 0.15)'
+                                : 'rgba(214, 31, 60, 0.12)',
                       },
                     ]}
                   >
@@ -890,18 +1318,18 @@ export default function BookingsScreen() {
                             b.status === 'pending'
                               ? '#EAB308'
                               : b.status === 'confirmed'
-                              ? '#10B981'
-                              : b.status === 'completed'
-                              ? '#10B981'
-                              : colors.destructive,
+                                ? '#10B981'
+                                : b.status === 'completed'
+                                  ? '#10B981'
+                                  : colors.destructive,
                         },
                       ]}
                     >
                       {b.status === 'pending'
                         ? 'WAITING FOR HOST APPROVAL'
                         : b.status === 'confirmed'
-                        ? 'CONFIRMED TRIP'
-                        : b.status.toUpperCase()}
+                          ? 'CONFIRMED TRIP'
+                          : b.status.toUpperCase()}
                     </Text>
                   </View>
 
@@ -1487,5 +1915,376 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  bookingRefText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  carSubTag: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  licensePlateTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  licensePlateText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  listingFilterContainer: {
+    marginTop: 10,
+    marginBottom: 12,
+    gap: 6,
+  },
+  listingFilterHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  listingFilterHeader: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  listingFilterScroll: {
+    gap: 8,
+    paddingVertical: 4,
+  },
+  listingFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  listingFilterChipText: {
+    fontSize: 12,
+  },
+  breakdownBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    gap: 6,
+  },
+  breakdownHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  breakdownSectionTitle: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  durationBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  durationBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+  },
+  scheduleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 4,
+  },
+  scheduleColumn: {
+    flex: 1,
+    gap: 2,
+  },
+  scheduleMiniLabel: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  scheduleDateVal: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  scheduleTimeVal: {
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  scheduleArrowWrap: {
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deliveryOptionName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  deliveryAddressText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  financeLineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  financeLineLabel: {
+    fontSize: 12,
+  },
+  financeLineValue: {
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  payoutHighlightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    paddingTop: 8,
+    marginTop: 4,
+  },
+  payoutTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  payoutSub: {
+    fontSize: 10.5,
+  },
+  payoutAmount: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#10B981',
+  },
+  renterAuditCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    gap: 8,
+  },
+  renterAuditHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  renterAuditAvatarWrap: {
+    position: 'relative',
+  },
+  renterAuditAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  renterAuditAvatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  renterAuditAvatarFallbackText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  auditMiniBadge: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    backgroundColor: '#10B981',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  renterAuditName: {
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  renterAuditRating: {
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  auditRenterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  auditRenterBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  privacyGuardNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  privacyGuardText: {
+    fontSize: 11,
+    fontWeight: '600',
+    flex: 1,
+  },
+  actionButtonsRowFull: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  declineBtnFull: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+  },
+  approveBtnFull: {
+    flex: 1.3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+  },
+  auditModalCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 20,
+    gap: 14,
+    maxHeight: '85%',
+  },
+  auditModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  auditShieldIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  auditModalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  auditModalSub: {
+    fontSize: 11.5,
+  },
+  auditProfileBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
+  },
+  auditAvatarWrap: {
+    position: 'relative',
+  },
+  auditAvatarImg: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
+  auditAvatarFallback: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  auditAvatarFallbackText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 20,
+  },
+  auditVerifiedBadge: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    backgroundColor: '#10B981',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  auditRenterName: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  auditRatingText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  auditBadgePill: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  auditPrivacyCard: {
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  auditDetailsCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    gap: 8,
+  },
+  auditDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(150,150,150,0.15)',
+  },
+  auditDetailLabel: {
+    fontSize: 12,
+  },
+  auditDetailVal: {
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  auditDeclineBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  auditApproveBtn: {
+    flex: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
   },
 });

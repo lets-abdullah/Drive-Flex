@@ -21,7 +21,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDriveFlex } from '@/context/AppContext';
 import { owners } from '@/data/catalog';
-import { dateAfter } from '@/lib/dates';
+import { dateAfter, daysBetween, shortDate } from '@/lib/dates';
 import { useColors } from '@/hooks/useColors';
 
 type DetailTab = 'overview' | 'specs' | 'policies';
@@ -35,12 +35,47 @@ export default function VehicleDetailsScreen() {
   const vehicle = vehicles.find((item) => item.slug === slug || item.id === slug);
   const host = vehicle ? owners.find((item) => item.id === vehicle.ownerId) : undefined;
 
+  const user = session;
+  const isHost = user?.role === 'host';
+  const isRenter = !user || user?.role === 'renter';
+
   const [activeTab, setActiveTab] = useState<DetailTab>('overview');
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
-  const [pickup, setPickup] = useState(dateAfter(3));
-  const [returnDate, setReturnDate] = useState(dateAfter(5));
+  const [pickup] = useState(dateAfter(3));
+  const [returnDate] = useState(dateAfter(6));
   const [showFullSpecs, setShowFullSpecs] = useState(false);
+
+  const handleProceedBooking = () => {
+    if (user?.role === 'host') {
+      Alert.alert('Booking Disabled', 'Host accounts cannot book vehicles. Switch to a renter profile to place reservations.');
+      return;
+    }
+    if (cannotBook) {
+      Alert.alert('Unavailable', 'This vehicle is currently marked as unavailable for booking.');
+      return;
+    }
+    if (!session) {
+      Alert.alert(
+        'Account Required',
+        'Please create an account or sign in to book this vehicle.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Create Account', onPress: () => router.push('/register') },
+          { text: 'Sign In', onPress: () => router.push('/sign-in') },
+        ]
+      );
+      return;
+    }
+    router.push({
+      pathname: '/checkout' as any,
+      params: {
+        slug: vehicle?.slug || (slug as string),
+        pickupParam: pickup,
+        returnParam: returnDate,
+      },
+    });
+  };
 
   const isFavorite = vehicle ? favorites.includes(vehicle.id) : false;
 
@@ -164,6 +199,66 @@ export default function VehicleDetailsScreen() {
           </View>
           <Feather name="chevron-right" size={19} color={colors.mutedForeground} />
         </Pressable>
+
+        {/* ─── 7. HOST PROFILE CARD (Cross-Profile Visibility & Privacy Guard) ─── */}
+        {host && (
+          <View
+            style={[
+              styles.hostProfileContainer,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <View style={styles.hostCardHeader}>
+              <Image
+                source={{ uri: host.profileImage || 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg' }}
+                contentFit="cover"
+                style={styles.hostAvatar}
+              />
+              <View style={{ flex: 1, gap: 2 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text numberOfLines={1} style={[styles.hostBusinessName, { color: colors.foreground }]}>
+                    {host.businessName || `${host.fullName}'s Fleet`}
+                  </Text>
+                  <View style={[styles.verifiedPill, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+                    <Text style={styles.verifiedPillText}>VERIFIED HOST</Text>
+                  </View>
+                </View>
+
+                <Text style={[styles.hostMeta, { color: colors.mutedForeground }]}>
+                  {host.fullName} • {host.city}
+                </Text>
+
+                <View style={styles.hostTrustRow}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                    <Feather name="star" size={12} color={colors.star} />
+                    <Text style={[styles.hostRatingText, { color: colors.foreground }]}>4.95</Text>
+                  </View>
+                  <Text style={[styles.hostDot, { color: colors.mutedForeground }]}>•</Text>
+                  <Text style={[styles.hostTripsText, { color: colors.mutedForeground }]}>
+                    24 Trips Hosted
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+
+            {/* View Host Profile CTA */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`View full public profile of ${host.fullName}`}
+              onPress={() => router.push(`/owners/${host.slug}`)}
+              style={[
+                styles.viewHostBtn,
+                { backgroundColor: colors.isDark ? '#1C232E' : '#F1F5F9', borderColor: colors.border },
+              ]}
+            >
+              <Text style={[styles.viewHostBtnText, { color: colors.foreground }]}>
+                View Host Profile & Fleet
+              </Text>
+              <Feather name="arrow-right" size={14} color={colors.foreground} />
+            </Pressable>
+          </View>
+        )}
       </Page>
 
       {/* ─── 4. BOTTOM ACTION DOCK (Screen 4: Price pill left + Book now right) ─── */}
@@ -193,47 +288,39 @@ export default function VehicleDetailsScreen() {
           </Text>
         </View>
 
-        {/* Right: Book now button */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={cannotBook ? 'Vehicle unavailable' : `Book ${vehicle.brand} ${vehicle.model} now`}
-          onPress={() => {
-            if (cannotBook) {
-              Alert.alert('Unavailable', 'This vehicle is currently marked as unavailable for booking.');
-              return;
-            }
-            if (!session) {
-              Alert.alert(
-                'Account Required',
-                'Please create an account or sign in to book this vehicle.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Create Account', onPress: () => router.push('/register') },
-                  { text: 'Sign In', onPress: () => router.push('/sign-in') },
-                ]
-              );
-              return;
-            }
-            router.push({
-              pathname: '/checkout' as any,
-              params: {
-                slug: vehicle.slug,
-                pickupParam: pickup,
-                returnParam: returnDate,
+        {/* Right: Book now button (Active for Renters, Disabled/Hidden for Hosts) */}
+        {user?.role === 'host' ? (
+          <View
+            style={[
+              styles.hostBrowsingBadge,
+              {
+                backgroundColor: colors.isDark ? '#1C232E' : '#F1F5F9',
+                borderColor: colors.border,
               },
-            });
-          }}
-          disabled={cannotBook}
-          style={({ pressed }) => [
-            styles.screen4BookNowBtn,
-            { backgroundColor: cannotBook ? colors.border : colors.primary },
-            pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
-          ]}
-        >
-          <Text style={styles.screen4BookNowText}>
-            {cannotBook ? 'Unavailable' : 'Book now'}
-          </Text>
-        </Pressable>
+            ]}
+          >
+            <Feather name="shield" size={13} color={colors.mutedForeground} />
+            <Text style={[styles.hostBrowsingBadgeText, { color: colors.mutedForeground }]}>
+              Host View • Browsing Only
+            </Text>
+          </View>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={cannotBook ? 'Vehicle unavailable' : `Book ${vehicle.brand} ${vehicle.model} now`}
+            onPress={handleProceedBooking}
+            disabled={cannotBook}
+            style={({ pressed }) => [
+              styles.screen4BookNowBtn,
+              { backgroundColor: cannotBook ? colors.border : colors.primary },
+              pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+            ]}
+          >
+            <Text style={styles.screen4BookNowText}>
+              {cannotBook ? 'Unavailable' : 'Book now'}
+            </Text>
+          </Pressable>
+        )}
       </View>
 
 
@@ -994,5 +1081,254 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: 0.2,
+  },
+  hostInspectionDock: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 4,
+  },
+  hostInspectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  hostInspectionNotice: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 1,
+  },
+  hostCompareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+  },
+  hostCompareBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  hostProfileContainer: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 20,
+    gap: 12,
+  },
+  hostCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  hostAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
+  hostBusinessName: {
+    fontSize: 15,
+    fontWeight: '800',
+    maxWidth: '65%',
+  },
+  verifiedPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  verifiedPillText: {
+    color: '#10B981',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  hostMeta: {
+    fontSize: 12,
+  },
+  hostTrustRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  hostRatingText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  hostDot: {
+    fontSize: 12,
+  },
+  hostTripsText: {
+    fontSize: 12,
+  },
+  privacyShieldNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  privacyNoticeText: {
+    fontSize: 11,
+    flex: 1,
+  },
+  viewHostBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  viewHostBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  /* Renter Booking Workflow Card */
+  renterBookingCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 20,
+    gap: 14,
+  },
+  bookingCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  bookingCardEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    marginBottom: 3,
+  },
+  bookingCardTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  bookingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  bookingPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  datesSelectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dateBox: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 12,
+    gap: 4,
+  },
+  dateBoxHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  dateBoxLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  dateBoxValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  dateBoxTime: {
+    fontSize: 11,
+  },
+  dateArrowWrap: {
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  durationPresetsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  durationPresetsLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  durationChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  durationChipText: {
+    fontSize: 11,
+  },
+  priceBreakdownBox: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 8,
+  },
+  priceBreakdownTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  calcFreeText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  calcTotalLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 4,
+  },
+  renterCtaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 16,
+    marginTop: 2,
+  },
+  renterCtaBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  /* Host View Badge */
+  hostBrowsingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  hostBrowsingBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

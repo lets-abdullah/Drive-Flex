@@ -197,11 +197,19 @@ const seedBookings = [
   },
 ];
 
+let memoryBookings = seedBookings.map((b) => ({ ...b, createdAt: new Date().toISOString() }));
+
 const seedIfEmpty = async () => {
-  const count = await Booking.countDocuments();
-  if (count === 0) {
-    await Booking.insertMany(seedBookings);
-    console.log(`🌱  Seeded ${seedBookings.length} status-segmented bookings into MongoDB`);
+  if (mongoose.connection.readyState !== 1) return false;
+  try {
+    const count = await Booking.countDocuments();
+    if (count === 0) {
+      await Booking.insertMany(seedBookings);
+      console.log(`🌱  Seeded ${seedBookings.length} status-segmented bookings into MongoDB`);
+    }
+    return true;
+  } catch {
+    return false;
   }
 };
 
@@ -210,49 +218,91 @@ const seedIfEmpty = async () => {
  * ------------------------------------------------------------------ */
 const BookingModel = {
   findAll: async (filter = {}) => {
-    await seedIfEmpty();
-    const query = {};
-    if (filter.vehicleId) query.vehicleId = filter.vehicleId;
-    if (filter.car_id) query.car_id = filter.car_id;
-    if (filter.status) query.status = filter.status;
-    if (filter.host_id) query.host_id = filter.host_id;
-    if (filter.renter_id) query.renter_id = filter.renter_id;
-    return Booking.find(query).sort({ createdAt: -1 }).lean();
+    const dbReady = await seedIfEmpty();
+    if (dbReady) {
+      try {
+        const query = {};
+        if (filter.vehicleId) query.vehicleId = filter.vehicleId;
+        if (filter.car_id) query.car_id = filter.car_id;
+        if (filter.status) query.status = filter.status;
+        if (filter.host_id) query.host_id = filter.host_id;
+        if (filter.renter_id) query.renter_id = filter.renter_id;
+        return await Booking.find(query).sort({ createdAt: -1 }).lean();
+      } catch {}
+    }
+    return memoryBookings.filter((b) => {
+      if (filter.vehicleId && b.vehicleId !== filter.vehicleId) return false;
+      if (filter.car_id && b.car_id !== filter.car_id) return false;
+      if (filter.status && b.status !== filter.status) return false;
+      if (filter.host_id && b.host_id !== filter.host_id) return false;
+      if (filter.renter_id && b.renter_id !== filter.renter_id) return false;
+      return true;
+    });
   },
 
   findById: async (id) => {
-    return Booking.findOne({ id }).lean();
+    if (mongoose.connection.readyState === 1) {
+      try {
+        return await Booking.findOne({ id }).lean();
+      } catch {}
+    }
+    return memoryBookings.find((b) => b.id === id) || null;
   },
 
   findActiveByVehicleId: async (vehicleId) => {
-    await seedIfEmpty();
-    return Booking.findOne({
-      $or: [{ vehicleId }, { car_id: vehicleId }],
-      status: { $in: ['active', 'confirmed', 'pending'] },
-    }).lean();
+    const dbReady = await seedIfEmpty();
+    if (dbReady) {
+      try {
+        return await Booking.findOne({
+          $or: [{ vehicleId }, { car_id: vehicleId }],
+          status: { $in: ['active', 'confirmed', 'pending'] },
+        }).lean();
+      } catch {}
+    }
+    return (
+      memoryBookings.find(
+        (b) =>
+          (b.vehicleId === vehicleId || b.car_id === vehicleId) &&
+          ['active', 'confirmed', 'pending'].includes(b.status)
+      ) || null
+    );
   },
 
   findByHost: async (hostId, statusFilter) => {
-    await seedIfEmpty();
-    const query = { host_id: hostId };
-    if (statusFilter && statusFilter !== 'all') {
-      query.status = statusFilter;
+    const dbReady = await seedIfEmpty();
+    if (dbReady) {
+      try {
+        const query = { host_id: hostId };
+        if (statusFilter && statusFilter !== 'all') {
+          query.status = statusFilter;
+        }
+        return await Booking.find(query).sort({ createdAt: -1 }).lean();
+      } catch {}
     }
-    return Booking.find(query).sort({ createdAt: -1 }).lean();
+    return memoryBookings.filter(
+      (b) => b.host_id === hostId && (!statusFilter || statusFilter === 'all' || b.status === statusFilter)
+    );
   },
 
   findByRenter: async (renterId, statusFilter) => {
-    await seedIfEmpty();
-    const query = { renter_id: renterId };
-    if (statusFilter && statusFilter !== 'all') {
-      query.status = statusFilter;
+    const dbReady = await seedIfEmpty();
+    if (dbReady) {
+      try {
+        const query = { renter_id: renterId };
+        if (statusFilter && statusFilter !== 'all') {
+          query.status = statusFilter;
+        }
+        return await Booking.find(query).sort({ createdAt: -1 }).lean();
+      } catch {}
     }
-    return Booking.find(query).sort({ createdAt: -1 }).lean();
+    return memoryBookings.filter(
+      (b) => b.renter_id === renterId && (!statusFilter || statusFilter === 'all' || b.status === statusFilter)
+    );
   },
 
   create: async (bookingData) => {
     const id = `book-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const newBooking = new Booking({
+    const payload = {
       id,
       car_id: bookingData.car_id || bookingData.vehicleId,
       vehicleId: bookingData.vehicleId || bookingData.car_id,
@@ -265,22 +315,50 @@ const BookingModel = {
       status: bookingData.status || 'pending',
       payment_status: bookingData.payment_status || 'paid',
       customer: bookingData.customer || bookingData.renter_name || 'Renter User',
+      createdAt: new Date().toISOString(),
       ...bookingData,
-    });
-    return (await newBooking.save()).toObject();
+    };
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const newBooking = new Booking(payload);
+        return (await newBooking.save()).toObject();
+      } catch {}
+    }
+    memoryBookings = [payload, ...memoryBookings];
+    return payload;
   },
 
   update: async (id, updateData) => {
-    return Booking.findOneAndUpdate(
-      { id },
-      { ...updateData, updatedAt: new Date() },
-      { new: true }
-    ).lean();
+    if (mongoose.connection.readyState === 1) {
+      try {
+        return await Booking.findOneAndUpdate(
+          { id },
+          { ...updateData, updatedAt: new Date() },
+          { new: true }
+        ).lean();
+      } catch {}
+    }
+    let updated = null;
+    memoryBookings = memoryBookings.map((b) => {
+      if (b.id === id) {
+        updated = { ...b, ...updateData, updatedAt: new Date().toISOString() };
+        return updated;
+      }
+      return b;
+    });
+    return updated;
   },
 
   delete: async (id) => {
-    const result = await Booking.deleteOne({ id });
-    return result.deletedCount > 0;
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const result = await Booking.deleteOne({ id });
+        return result.deletedCount > 0;
+      } catch {}
+    }
+    const before = memoryBookings.length;
+    memoryBookings = memoryBookings.filter((b) => b.id !== id);
+    return memoryBookings.length < before;
   },
 };
 

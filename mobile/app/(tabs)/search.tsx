@@ -43,6 +43,9 @@ export default function SearchScreen() {
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCity, setSelectedCity] = useState<string | null>(
+    isFilterActive ? currentCity.name : null
+  );
   const [selectedBrand, setSelectedBrand] = useState<string | null>(
     params.brand ?? null
   );
@@ -71,18 +74,45 @@ export default function SearchScreen() {
     }
   }, [params.brand, params.category]);
 
+  // Synchronize with LocationContext city filter
+  useEffect(() => {
+    if (isFilterActive) {
+      setSelectedCity(currentCity.name);
+    }
+  }, [isFilterActive, currentCity.name]);
+
+  const handleSelectCity = (cityName: string | null) => {
+    setSelectedCity(cityName);
+    if (cityName) {
+      const matched = PAKISTAN_CITIES.find(
+        (c) => c.name.toLowerCase() === cityName.toLowerCase()
+      );
+      if (matched) {
+        applyLocation(matched, radiusKm);
+      }
+    } else {
+      clearFilter();
+    }
+  };
+
   // Handle GPS Auto-detect button
   const handleDetectGps = async () => {
     const detected = await detectUserLocation();
     if (detected) {
       applyLocation(detected, radiusKm);
-      setSearchQuery(detected.name);
+      setSelectedCity(detected.name);
     }
   };
 
-  // Filtered vehicles list (always guaranteed to show vehicles)
+  // Filtered vehicles list (strictly 1 car per [City, Brand] pair)
   const filteredVehicles = useMemo(() => {
-    let list = vehicles.filter((v) => {
+    const seenCityBrand = new Set<string>();
+
+    const list = vehicles.filter((v) => {
+      if (v.isDelisted || v.status === 'maintenance') return false;
+
+      const vCity = (v.city_name || v.location.split(',')[0] || '').trim();
+
       // 1. Universal search text: matches brand, model, category, location, transmission, fuel
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -91,12 +121,18 @@ export default function SearchScreen() {
           v.model.toLowerCase().includes(q) ||
           v.category.toLowerCase().includes(q) ||
           v.location.toLowerCase().includes(q) ||
+          vCity.toLowerCase().includes(q) ||
           v.transmission.toLowerCase().includes(q) ||
           (v.fuelType && v.fuelType.toLowerCase().includes(q));
         if (!matchesQuery) return false;
       }
 
-      // 2. Brand filter
+      // 2. City filter (exact city match so each city has 1 car per brand)
+      if (selectedCity && vCity.toLowerCase() !== selectedCity.toLowerCase()) {
+        return false;
+      }
+
+      // 3. Brand filter
       if (
         selectedBrand &&
         !v.brand.toLowerCase().includes(selectedBrand.toLowerCase())
@@ -104,12 +140,12 @@ export default function SearchScreen() {
         return false;
       }
 
-      // 3. Category filter
+      // 4. Category filter
       if (selectedCategory !== 'All' && v.category !== selectedCategory) {
         return false;
       }
 
-      // 4. Transmission filter
+      // 5. Transmission filter
       if (
         selectedTransmission &&
         v.transmission.toLowerCase() !== selectedTransmission.toLowerCase()
@@ -117,35 +153,22 @@ export default function SearchScreen() {
         return false;
       }
 
-      // 5. Price filter
+      // 6. Price filter
       if (maxPrice !== null && v.pricePerDay > maxPrice) {
         return false;
       }
 
+      // 7. Enforce strictly 1 car per (City, Brand) combination
+      const pairKey = `${vCity.toLowerCase()}::${v.brand.trim().toLowerCase()}`;
+      if (seenCityBrand.has(pairKey)) {
+        return false;
+      }
+      seenCityBrand.add(pairKey);
+
       return true;
     });
 
-    // 6. Location / Radius GPS filter with automatic fallback
-    if (isFilterActive) {
-      const withinRadius = list.filter((v) => {
-        const dist = getDistanceToVehicle(v);
-        return dist !== null && dist <= radiusKm;
-      });
-
-      if (withinRadius.length > 0) {
-        list = withinRadius;
-      } else {
-        // If 0 vehicles are strictly inside the chosen radius, do not empty the screen;
-        // keep fleet visible and sort by closest distance
-        list = [...list].sort((a, b) => {
-          const distA = getDistanceToVehicle(a) ?? 9999;
-          const distB = getDistanceToVehicle(b) ?? 9999;
-          return distA - distB;
-        });
-      }
-    }
-
-    // 7. Sorting
+    // 8. Sorting
     if (sortBy === 'price-asc') {
       list.sort((a, b) => a.pricePerDay - b.pricePerDay);
     } else if (sortBy === 'price-desc') {
@@ -159,17 +182,17 @@ export default function SearchScreen() {
   }, [
     vehicles,
     searchQuery,
+    selectedCity,
     selectedBrand,
     selectedCategory,
     selectedTransmission,
     maxPrice,
-    isFilterActive,
-    radiusKm,
-    getDistanceToVehicle,
     sortBy,
   ]);
 
   const activeFiltersCount =
+    (selectedCity ? 1 : 0) +
+    (selectedBrand ? 1 : 0) +
     (selectedCategory !== 'All' ? 1 : 0) +
     (selectedTransmission ? 1 : 0) +
     (maxPrice !== null ? 1 : 0);
@@ -300,7 +323,74 @@ export default function SearchScreen() {
         </Pressable>
       </View>
 
-      {/* ─── 3. BRAND HORIZONTAL QUICK-SELECTOR (Clean & Spacious) ─── */}
+      {/* ─── 3A. CITY HORIZONTAL QUICK-SELECTOR ─── */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.brandSelectorRow}
+      >
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => handleSelectCity(null)}
+          style={[
+            styles.brandAllPill,
+            {
+              backgroundColor: selectedCity === null ? colors.primary : colors.card,
+              borderColor: selectedCity === null ? colors.primary : colors.border,
+              height: 36,
+              paddingVertical: 6,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.brandAllText,
+              { color: selectedCity === null ? '#FFFFFF' : colors.foreground, fontSize: 12 },
+            ]}
+          >
+            All Cities
+          </Text>
+        </Pressable>
+
+        {PAKISTAN_CITIES.map((city) => {
+          const isSelected = selectedCity?.toLowerCase() === city.name.toLowerCase();
+          return (
+            <Pressable
+              key={city.name}
+              accessibilityRole="button"
+              accessibilityLabel={`Filter by ${city.name}`}
+              onPress={() => handleSelectCity(isSelected ? null : city.name)}
+              style={[
+                styles.brandAllPill,
+                {
+                  backgroundColor: isSelected ? colors.primary : colors.card,
+                  borderColor: isSelected ? colors.primary : colors.border,
+                  height: 36,
+                  paddingVertical: 6,
+                  flexDirection: 'row',
+                  gap: 5,
+                },
+              ]}
+            >
+              <Feather
+                name="map-pin"
+                size={11}
+                color={isSelected ? '#FFFFFF' : colors.primary}
+              />
+              <Text
+                style={[
+                  styles.brandAllText,
+                  { color: isSelected ? '#FFFFFF' : colors.foreground, fontSize: 12 },
+                ]}
+              >
+                {city.name}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {/* ─── 3B. BRAND HORIZONTAL QUICK-SELECTOR (Clean & Spacious) ─── */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -324,7 +414,7 @@ export default function SearchScreen() {
               { color: selectedBrand === null ? '#FFFFFF' : colors.foreground },
             ]}
           >
-            All
+            All Brands
           </Text>
         </Pressable>
 
@@ -363,16 +453,15 @@ export default function SearchScreen() {
       <InteractiveMap
         vehicles={filteredVehicles}
         onSelectCluster={(cluster) => {
-          const cleanCity = cluster.name.split('/')[0].trim();
+          const cleanCity = cluster.name.split('/')[0].replace('Cantt', '').trim();
           const matched = PAKISTAN_CITIES.find(
             (c) =>
               cleanCity.toLowerCase().includes(c.name.toLowerCase()) ||
               c.name.toLowerCase().includes(cleanCity.toLowerCase())
           );
           if (matched) {
-            applyLocation(matched, radiusKm);
+            handleSelectCity(matched.name);
           }
-          setSearchQuery(cleanCity);
         }}
         onOpenMap={handleOpenFullMap}
       />
@@ -395,21 +484,33 @@ export default function SearchScreen() {
         </Pressable>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          {isFilterActive && (
+          {selectedCity && (
             <Pressable
-              onPress={() => clearFilter()}
+              onPress={() => handleSelectCity(null)}
               style={[styles.activeFilterChip, { backgroundColor: colors.secondary, borderColor: colors.border }]}
             >
               <Feather name="map-pin" size={11} color={colors.primary} />
               <Text style={[styles.activeFilterChipText, { color: colors.foreground }]}>
-                {radiusKm}km
+                {selectedCity}
+              </Text>
+              <Feather name="x" size={11} color={colors.mutedForeground} />
+            </Pressable>
+          )}
+
+          {selectedBrand && (
+            <Pressable
+              onPress={() => setSelectedBrand(null)}
+              style={[styles.activeFilterChip, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+            >
+              <Text style={[styles.activeFilterChipText, { color: colors.foreground }]}>
+                {selectedBrand}
               </Text>
               <Feather name="x" size={11} color={colors.mutedForeground} />
             </Pressable>
           )}
 
           <Text style={[styles.resultsCountText, { color: colors.mutedForeground }]}>
-            {filteredVehicles.length} cars found
+            {filteredVehicles.length} {filteredVehicles.length === 1 ? 'car' : 'cars'} found
           </Text>
         </View>
       </View>
@@ -422,10 +523,12 @@ export default function SearchScreen() {
             detail="Try clearing filters, switching brands, or adjusting search location."
             action="Reset Filters"
             onAction={() => {
+              handleSelectCity(null);
               setSelectedBrand(null);
               setSelectedCategory('All');
               setSelectedTransmission(null);
               setMaxPrice(null);
+              setSearchQuery('');
             }}
           />
         </View>
@@ -475,8 +578,86 @@ export default function SearchScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
-              {/* Category / Body Type */}
+              {/* City Filter */}
               <Text style={[styles.filterSectionLabel, { color: colors.mutedForeground }]}>
+                CITY
+              </Text>
+              <View style={styles.filterOptionsWrap}>
+                {[
+                  { label: 'All Cities', val: null },
+                  ...PAKISTAN_CITIES.map((c) => ({ label: c.name, val: c.name })),
+                ].map((item) => {
+                  const isSelected =
+                    (item.val === null && selectedCity === null) ||
+                    (item.val !== null && selectedCity?.toLowerCase() === item.val.toLowerCase());
+                  return (
+                    <Pressable
+                      key={item.label}
+                      onPress={() => handleSelectCity(item.val)}
+                      style={[
+                        styles.filterChip,
+                        {
+                          backgroundColor: isSelected ? colors.primary : colors.secondary,
+                          borderColor: isSelected ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          {
+                            color: isSelected ? '#FFFFFF' : colors.foreground,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Brand Filter */}
+              <Text style={[styles.filterSectionLabel, { color: colors.mutedForeground, marginTop: 18 }]}>
+                BRAND
+              </Text>
+              <View style={styles.filterOptionsWrap}>
+                {[
+                  { label: 'All Brands', val: null },
+                  ...POPULAR_BRANDS.map((b) => ({ label: b.name, val: b.query })),
+                ].map((item) => {
+                  const isSelected = selectedBrand === item.val;
+                  return (
+                    <Pressable
+                      key={item.label}
+                      onPress={() => setSelectedBrand(item.val)}
+                      style={[
+                        styles.filterChip,
+                        {
+                          backgroundColor: isSelected ? colors.primary : colors.secondary,
+                          borderColor: isSelected ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          {
+                            color: isSelected ? '#FFFFFF' : colors.foreground,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Category / Body Type */}
+              <Text style={[styles.filterSectionLabel, { color: colors.mutedForeground, marginTop: 18 }]}>
                 BODY TYPE / CATEGORY
               </Text>
               <View style={styles.filterOptionsWrap}>
@@ -595,6 +776,8 @@ export default function SearchScreen() {
             <View style={styles.filterActionRow}>
               <Pressable
                 onPress={() => {
+                  handleSelectCity(null);
+                  setSelectedBrand(null);
                   setSelectedCategory('All');
                   setMaxPrice(null);
                   setSelectedTransmission(null);

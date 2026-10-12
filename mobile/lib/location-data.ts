@@ -11,15 +11,6 @@ export const PAKISTAN_CITIES: CityLocation[] = [
   { name: 'Islamabad', province: 'Federal', lat: 33.6844, lng: 73.0479 },
   { name: 'Rawalpindi', province: 'Punjab', lat: 33.5651, lng: 73.0169 },
   { name: 'Karachi', province: 'Sindh', lat: 24.8607, lng: 67.0011 },
-  { name: 'Faisalabad', province: 'Punjab', lat: 31.4504, lng: 73.135 },
-  { name: 'Peshawar', province: 'KPK', lat: 34.0151, lng: 71.5249 },
-  { name: 'Gujranwala', province: 'Punjab', lat: 32.1877, lng: 74.1945 },
-  { name: 'Sialkot', province: 'Punjab', lat: 32.4945, lng: 74.5229 },
-  { name: 'Quetta', province: 'Balochistan', lat: 30.1798, lng: 66.975 },
-  { name: 'Bahawalpur', province: 'Punjab', lat: 29.3544, lng: 71.6911 },
-  { name: 'Sargodha', province: 'Punjab', lat: 32.0836, lng: 72.6711 },
-  { name: 'Abbottabad', province: 'KPK', lat: 34.1688, lng: 73.2215 },
-  { name: 'Hyderabad', province: 'Sindh', lat: 25.396, lng: 68.3578 },
 ];
 
 export const RADIUS_OPTIONS = [10, 25, 50, 100, 250, 500] as const;
@@ -69,8 +60,8 @@ export function resolveLocationCoords(
   if (normalized.includes('sindh')) {
     return PAKISTAN_CITIES[4]; // Karachi fallback
   }
-  if (normalized.includes('kpk') || normalized.includes('khyber')) {
-    return PAKISTAN_CITIES[6]; // Peshawar fallback
+  if (normalized.includes('kpk') || normalized.includes('khyber') || normalized.includes('federal')) {
+    return PAKISTAN_CITIES[2]; // Islamabad fallback
   }
 
   return null;

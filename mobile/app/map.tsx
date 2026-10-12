@@ -15,6 +15,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDriveFlex } from '@/context/AppContext';
 import { type Vehicle } from '@/data/catalog';
@@ -47,12 +48,15 @@ export default function FullScreenMapScreen() {
   // Animated card overlay
   const overlaySlideAnim = useRef(new Animated.Value(200)).current;
 
-  // Iframe ref on Web
+  // Iframe ref on Web, WebView ref on Native
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const webViewRef = useRef<WebView | null>(null);
 
   // Filter cars based on city, search query, radius
   const filteredCars = useMemo(() => {
-    let result = vehicles.filter((v) => v.latitude && v.longitude);
+    let result = vehicles.filter(
+      (v) => v.latitude && v.longitude && !v.isDelisted && v.status !== 'maintenance'
+    );
 
     if (searchCity.trim().length > 0) {
       const q = searchCity.toLowerCase().trim();
@@ -174,6 +178,10 @@ export default function FullScreenMapScreen() {
           }),
           '*'
         );
+      } else if (webViewRef.current) {
+        webViewRef.current.injectJavaScript(
+          `if (window.flyToGps) { window.flyToGps(${coords.lat}, ${coords.lng}); } true;`
+        );
       }
     } catch (err) {
       console.warn('GPS location error:', err);
@@ -199,15 +207,37 @@ export default function FullScreenMapScreen() {
         }),
         '*'
       );
+    } else if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(
+        `if (window.flyToCity) { window.flyToCity(${coords.lat}, ${coords.lng}, ${coords.zoom}); } true;`
+      );
+    }
+  };
+
+  const handleNativeMessage = (event: any) => {
+    try {
+      const data = typeof event.nativeEvent.data === 'string'
+        ? JSON.parse(event.nativeEvent.data)
+        : event.nativeEvent.data;
+      if (data && data.type === 'SELECT_CAR') {
+        const car = vehicles.find((v) => v.id === data.carId);
+        if (car) {
+          setSelectedCar(car);
+        }
+      }
+    } catch {
+      // ignore
     }
   };
 
   // Build Leaflet HTML Document for Web rendering
   const leafletHtml = useMemo(() => {
     const isDark = colors.isDark;
+    const cartoKey =
+      process.env.EXPO_PUBLIC_CARTO_API_KEY?.trim() || 'cb1_4hur_1_e2c17a9128e2810ca332650b';
     const tileUrl = isDark
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+      ? `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?key=${cartoKey}`
+      : `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${cartoKey}`;
 
     const cityCoord = CITY_COORDINATES[activeCity] || { lat: 30.1900, lng: 71.4600, zoom: 13 };
     const initialLat = userCoords ? userCoords.lat : cityCoord.lat;
@@ -237,6 +267,11 @@ export default function FullScreenMapScreen() {
           * { margin: 0; padding: 0; box-sizing: border-box; }
           html, body, #map { width: 100%; height: 100%; background: ${isDark ? '#0F1318' : '#F8FAFC'}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
           .leaflet-control-attribution { display: none !important; }
+          ${!cartoKey && isDark ? `
+          .leaflet-tile {
+            filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7) !important;
+          }
+          ` : ''}
           .leaflet-bar { border: none !important; box-shadow: 0 4px 14px rgba(0,0,0,0.2) !important; border-radius: 12px !important; overflow: hidden; }
           .leaflet-bar a { background-color: ${isDark ? '#1C232E' : '#FFFFFF'} !important; color: ${isDark ? '#FFFFFF' : '#111827'} !important; border-bottom: 1px solid ${isDark ? '#2D3748' : '#E2E8F0'} !important; }
 
@@ -348,7 +383,13 @@ export default function FullScreenMapScreen() {
                 document.querySelectorAll('.car-pin-marker').forEach(el => el.classList.remove('active'));
                 const pinEl = document.getElementById('pin-' + car.id);
                 if (pinEl) pinEl.classList.add('active');
-                window.parent.postMessage({ type: 'SELECT_CAR', carId: car.id }, '*');
+                const payload = JSON.stringify({ type: 'SELECT_CAR', carId: car.id });
+                if (window.ReactNativeWebView) {
+                  window.ReactNativeWebView.postMessage(payload);
+                }
+                if (window.parent) {
+                  window.parent.postMessage(payload, '*');
+                }
               });
 
               markers.push(marker);
@@ -357,22 +398,29 @@ export default function FullScreenMapScreen() {
 
           renderMarkers();
 
-          // Listen for navigation messages from React Native
+          window.flyToCity = function(lat, lng, zoom) {
+            map.flyTo([lat, lng], zoom || 13, { duration: 1.2 });
+          };
+
+          window.flyToGps = function(lat, lng) {
+            map.flyTo([lat, lng], 14, { duration: 1.2 });
+            const beaconIcon = L.divIcon({
+              className: '',
+              html: '<div class="gps-beacon-wrap"><div class="gps-beacon-pulse"></div><div class="gps-beacon-center"></div></div>',
+              iconSize: [24, 24],
+              iconAnchor: [12, 12],
+            });
+            L.marker([lat, lng], { icon: beaconIcon }).addTo(map);
+          };
+
+          // Listen for navigation messages from React Native Web
           window.addEventListener('message', (e) => {
             try {
               const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
               if (data.type === 'FLY_TO') {
-                map.flyTo([data.lat, data.lng], data.zoom || 13, { duration: 1.2 });
+                window.flyToCity(data.lat, data.lng, data.zoom);
               } else if (data.type === 'FLY_TO_GPS') {
-                map.flyTo([data.lat, data.lng], 14, { duration: 1.2 });
-                // Add GPS user beacon
-                const beaconIcon = L.divIcon({
-                  className: '',
-                  html: '<div class="gps-beacon-wrap"><div class="gps-beacon-pulse"></div><div class="gps-beacon-center"></div></div>',
-                  iconSize: [24, 24],
-                  iconAnchor: [12, 12],
-                });
-                L.marker([data.lat, data.lng], { icon: beaconIcon }).addTo(map);
+                window.flyToGps(data.lat, data.lng);
               }
             } catch(err) {}
           });
@@ -399,31 +447,24 @@ export default function FullScreenMapScreen() {
             title="DriveFlex Interactive Pakistani Vehicle Fleet Map"
           />
         ) : (
-          /* Native Fallback Vector Canvas with Pin Markers */
-          <View style={[styles.nativeMapCanvas, { backgroundColor: colors.isDark ? '#0F1318' : '#F1F5F9' }]}>
-            <View style={styles.nativeGrid}>
-              {filteredCars.map((car, idx) => (
-                <Pressable
-                  key={car.id}
-                  onPress={() => setSelectedCar(car)}
-                  style={[
-                    styles.nativeCarMarker,
-                    {
-                      backgroundColor: colors.card,
-                      borderColor: selectedCar?.id === car.id ? '#FFFFFF' : colors.primary,
-                      top: 120 + ((idx * 65) % (SCREEN_HEIGHT - 350)),
-                      left: 30 + ((idx * 95) % (SCREEN_WIDTH - 120)),
-                    },
-                  ]}
-                >
-                  <View style={[styles.markerDot, { backgroundColor: colors.primary }]} />
-                  <Text style={[styles.markerText, { color: colors.foreground }]}>
-                    ${car.price_per_day || car.pricePerDay}/d
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
+          <WebView
+            ref={webViewRef as any}
+            originWhitelist={['*']}
+            source={{ html: leafletHtml }}
+            style={{ flex: 1, backgroundColor: colors.background }}
+            onMessage={handleNativeMessage}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            startInLoadingState={true}
+            renderLoading={() => (
+              <View style={[StyleSheet.absoluteFill, styles.loadingCenter, { backgroundColor: colors.background }]}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={[{ marginTop: 12, fontSize: 13, fontWeight: '600', color: colors.mutedForeground }]}>
+                  Loading Live Fleet Map...
+                </Text>
+              </View>
+            )}
+          />
         )}
       </View>
 
@@ -465,7 +506,7 @@ export default function FullScreenMapScreen() {
           >
             <Feather name="search" size={17} color={colors.mutedForeground} style={{ marginLeft: 12 }} />
             <TextInput
-              placeholder="Search by city or area (e.g. Multan, Lahore)..."
+              placeholder="Search by city or area..."
               placeholderTextColor={colors.mutedForeground}
               value={searchCity}
               onChangeText={(text) => {
@@ -679,36 +720,10 @@ const styles = StyleSheet.create({
   screenContainer: {
     flex: 1,
   },
-  nativeMapCanvas: {
-    flex: 1,
-    position: 'relative',
-  },
-  nativeGrid: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  nativeCarMarker: {
-    position: 'absolute',
-    flexDirection: 'row',
+  loadingCenter: {
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 2,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-  },
-  markerDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 5,
+    justifyContent: 'center',
+    zIndex: 10,
   },
   markerText: {
     fontSize: 12,
