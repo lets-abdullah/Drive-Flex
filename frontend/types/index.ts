@@ -56,6 +56,17 @@ export type Vehicle = {
   variant?: string;
   status?: 'available' | 'booked';
   bookable?: boolean;
+  engine?: string;
+  horsepower?: string;
+  mileage?: string;
+  wheels?: string;
+  safetyFeatures?: string[];
+  angleImages?: {
+    angle: number;
+    label: string;
+    url: string;
+    vertical?: 'standard' | 'top' | 'interior';
+  }[];
   currentBooking?: {
     id: string;
     customer: string;

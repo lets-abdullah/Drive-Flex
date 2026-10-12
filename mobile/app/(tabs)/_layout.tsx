@@ -5,6 +5,7 @@ import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
+import { useDriveFlex } from '@/context/AppContext';
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
@@ -14,11 +15,21 @@ function FloatingTabBar({ state, navigation }: TabBarProps) {
   const isDark = colorScheme === 'dark';
   const isIOS = Platform.OS === 'ios';
   const insets = useSafeAreaInsets();
+  const { session } = useDriveFlex();
+  const isHost = session?.role === 'host';
 
   const isAndroid = Platform.OS === 'android';
   const dockBottom = isAndroid
     ? Math.max(insets.bottom, 24) + 12
     : Math.max(insets.bottom, 16) + 10;
+
+  // Strict role isolation: Hosts navigate their fleet, bookings, and profile
+  const visibleRoutes = state.routes.filter((route) => {
+    if (isHost) {
+      return route.name === 'index' || route.name === 'bookings' || route.name === 'profile';
+    }
+    return true;
+  });
 
   return (
     <View
@@ -40,13 +51,16 @@ function FloatingTabBar({ state, navigation }: TabBarProps) {
         />
       )}
 
-      {state.routes.map((route, index) => {
-        const isFocused = state.index === index;
+      {visibleRoutes.map((route) => {
+        const routeIndex = state.routes.findIndex((r) => r.key === route.key);
+        const isFocused = state.index === routeIndex;
         const iconName: keyof typeof Feather.glyphMap =
           route.name === 'index'
-            ? 'home'
+            ? isHost ? 'grid' : 'home'
             : route.name === 'search'
             ? 'search'
+            : route.name === 'bookings'
+            ? 'calendar'
             : route.name === 'favorites'
             ? 'heart'
             : 'user';
@@ -94,7 +108,8 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
-      <Tabs.Screen name="search" options={{ title: 'Search' }} />
+      <Tabs.Screen name="search" options={{ title: 'Browse' }} />
+      <Tabs.Screen name="bookings" options={{ title: 'Bookings' }} />
       <Tabs.Screen name="favorites" options={{ title: 'Saved' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
     </Tabs>

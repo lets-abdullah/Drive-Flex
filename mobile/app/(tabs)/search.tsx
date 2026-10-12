@@ -1,9 +1,10 @@
 import { Feather } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Dimensions,
+  ActivityIndicator,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,689 +12,916 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { EmptyState, Notice, Page, Pill } from '@/components/Marketplace';
+import { BrandLogo, POPULAR_BRANDS } from '@/components/BrandLogos';
+import { VehicleCardSearchResult } from '@/components/CardDesigns';
+import { InteractiveMap } from '@/components/InteractiveMap';
+import { EmptyState, Page } from '@/components/Marketplace';
 import { categories, type Vehicle } from '@/data/catalog';
+import { PAKISTAN_CITIES } from '@/lib/location-data';
 import { useDriveFlex } from '@/context/AppContext';
 import { useLocationFilter } from '@/context/LocationContext';
 import { useColors } from '@/hooks/useColors';
 
-const cities = ['All cities', 'Lahore', 'Islamabad', 'Karachi'];
-
 export default function SearchScreen() {
   const colors = useColors();
-  const params = useLocalSearchParams<{ category?: string }>();
-  const { vehicles, favorites, toggleFavorite, apiError, refresh } = useDriveFlex();
+  const params = useLocalSearchParams<{
+    category?: string;
+    brand?: string;
+  }>();
+
+  const { vehicles } = useDriveFlex();
   const {
     currentCity,
     radiusKm,
     isFilterActive,
-    openModal,
-    clearFilter,
     applyLocation,
+    clearFilter,
+    detectUserLocation,
+    isLocating,
     getDistanceToVehicle,
   } = useLocationFilter();
 
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState(params.category ?? 'All');
-  const [city, setCity] = useState('All cities');
+  // Search & Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedBrand, setSelectedBrand] = useState<string | null>(
+    params.brand ?? null
+  );
+  const [selectedCategory, setSelectedCategory] = useState<string>(
+    params.category ?? 'All'
+  );
+  const [selectedTransmission, setSelectedTransmission] = useState<string | null>(
+    null
+  );
   const [maxPrice, setMaxPrice] = useState<number | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sortBy, setSortBy] = useState<'popular' | 'price-asc' | 'price-desc'>(
+    'popular'
+  );
 
+  // Modals state
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [sortModalVisible, setSortModalVisible] = useState(false);
+
+  // Synchronize when route query params change (e.g. clicking brand from home screen)
   useEffect(() => {
-    if (params.category && categories.includes(params.category)) {
-      setCategory(params.category);
+    if (params.brand !== undefined) {
+      setSelectedBrand(params.brand);
     }
-  }, [params.category]);
+    if (params.category !== undefined) {
+      setSelectedCategory(params.category);
+    }
+  }, [params.brand, params.category]);
 
-  const filtered = useMemo(() => {
-    let list = vehicles.filter((vehicle) => {
-      const searchText = `${vehicle.brand} ${vehicle.model} ${vehicle.category} ${vehicle.location}`.toLowerCase();
-      const matchQuery = searchText.includes(query.trim().toLowerCase());
-      const matchCategory = category === 'All' || vehicle.category === category;
-      const matchCity = city === 'All cities' || vehicle.location.toLowerCase().startsWith(city.toLowerCase());
-      const matchPrice = maxPrice === null || vehicle.pricePerDay <= maxPrice;
+  // Handle GPS Auto-detect button
+  const handleDetectGps = async () => {
+    const detected = await detectUserLocation();
+    if (detected) {
+      applyLocation(detected, radiusKm);
+      setSearchQuery(detected.name);
+    }
+  };
 
-      // Facebook Marketplace Radius filter
-      if (isFilterActive) {
-        const dist = getDistanceToVehicle(vehicle);
-        if (dist === null || dist > radiusKm) {
-          return false;
-        }
+  // Filtered vehicles list (always guaranteed to show vehicles)
+  const filteredVehicles = useMemo(() => {
+    let list = vehicles.filter((v) => {
+      // 1. Universal search text: matches brand, model, category, location, transmission, fuel
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesQuery =
+          v.brand.toLowerCase().includes(q) ||
+          v.model.toLowerCase().includes(q) ||
+          v.category.toLowerCase().includes(q) ||
+          v.location.toLowerCase().includes(q) ||
+          v.transmission.toLowerCase().includes(q) ||
+          (v.fuelType && v.fuelType.toLowerCase().includes(q));
+        if (!matchesQuery) return false;
       }
 
-      return matchQuery && matchCategory && matchCity && matchPrice;
+      // 2. Brand filter
+      if (
+        selectedBrand &&
+        !v.brand.toLowerCase().includes(selectedBrand.toLowerCase())
+      ) {
+        return false;
+      }
+
+      // 3. Category filter
+      if (selectedCategory !== 'All' && v.category !== selectedCategory) {
+        return false;
+      }
+
+      // 4. Transmission filter
+      if (
+        selectedTransmission &&
+        v.transmission.toLowerCase() !== selectedTransmission.toLowerCase()
+      ) {
+        return false;
+      }
+
+      // 5. Price filter
+      if (maxPrice !== null && v.pricePerDay > maxPrice) {
+        return false;
+      }
+
+      return true;
     });
 
+    // 6. Location / Radius GPS filter with automatic fallback
     if (isFilterActive) {
-      list.sort((a, b) => {
-        const distA = getDistanceToVehicle(a) ?? 9999;
-        const distB = getDistanceToVehicle(b) ?? 9999;
-        return distA - distB;
+      const withinRadius = list.filter((v) => {
+        const dist = getDistanceToVehicle(v);
+        return dist !== null && dist <= radiusKm;
       });
+
+      if (withinRadius.length > 0) {
+        list = withinRadius;
+      } else {
+        // If 0 vehicles are strictly inside the chosen radius, do not empty the screen;
+        // keep fleet visible and sort by closest distance
+        list = [...list].sort((a, b) => {
+          const distA = getDistanceToVehicle(a) ?? 9999;
+          const distB = getDistanceToVehicle(b) ?? 9999;
+          return distA - distB;
+        });
+      }
+    }
+
+    // 7. Sorting
+    if (sortBy === 'price-asc') {
+      list.sort((a, b) => a.pricePerDay - b.pricePerDay);
+    } else if (sortBy === 'price-desc') {
+      list.sort((a, b) => b.pricePerDay - a.pricePerDay);
+    } else {
+      // Popular
+      list.sort((a, b) => (b.reviewCount || 0) - (a.reviewCount || 0));
     }
 
     return list;
-  }, [vehicles, query, category, city, maxPrice, isFilterActive, radiusKm, getDistanceToVehicle]);
+  }, [
+    vehicles,
+    searchQuery,
+    selectedBrand,
+    selectedCategory,
+    selectedTransmission,
+    maxPrice,
+    isFilterActive,
+    radiusKm,
+    getDistanceToVehicle,
+    sortBy,
+  ]);
 
-  const screenWidth = Dimensions.get('window').width;
-  const cardWidth = Math.max(150, (screenWidth - 52) / 2);
+  const activeFiltersCount =
+    (selectedCategory !== 'All' ? 1 : 0) +
+    (selectedTransmission ? 1 : 0) +
+    (maxPrice !== null ? 1 : 0);
 
-  const activeFilterCount =
-    (category !== 'All' ? 1 : 0) +
-    (city !== 'All cities' ? 1 : 0) +
-    (maxPrice !== null ? 1 : 0) +
-    (isFilterActive ? 1 : 0);
+  const sortLabel =
+    sortBy === 'price-asc'
+      ? 'Price: Low'
+      : sortBy === 'price-desc'
+      ? 'Price: High'
+      : 'Popular';
+
+  const handleOpenFullMap = () => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    router.push('/map');
+  };
 
   return (
     <Page tabbed>
-      {/* ─── HEADER ─── */}
-      <View style={styles.header}>
-        <Text style={[styles.eyebrow, { color: colors.accent }]}>DISCOVER DRIVEFLEX</Text>
-        <View style={styles.titleRow}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Find your{'\n'}next ride.</Text>
+      {/* ─── 1. TOP HEADER (Back Button + Search Cars + Map & Filter Sliders) ─── */}
+      <View style={styles.topHeaderRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)');
+            }
+          }}
+          style={[
+            styles.headerSquareBtn,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          <Feather name="arrow-left" size={19} color={colors.foreground} />
+        </Pressable>
+
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+          Search Cars
+        </Text>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {/* Interactive Map Button */}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Switch view"
-            onPress={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-            style={[styles.viewToggleBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+            accessibilityLabel="Open Interactive Fleet Map"
+            onPress={handleOpenFullMap}
+            style={[
+              styles.headerSquareBtn,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+              },
+            ]}
           >
-            <Feather name={viewMode === 'grid' ? 'list' : 'grid'} size={18} color={colors.foreground} />
+            <Feather name="map" size={17} color={colors.accent} />
+          </Pressable>
+
+          {/* Filter Sliders Button with Active Badge */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open all filters"
+            onPress={() => setFilterModalVisible(true)}
+            style={[
+              styles.headerSquareBtn,
+              {
+                backgroundColor: activeFiltersCount > 0 ? colors.primary : colors.card,
+                borderColor: activeFiltersCount > 0 ? colors.primary : colors.border,
+              },
+            ]}
+          >
+            <Feather
+              name="sliders"
+              size={18}
+              color={activeFiltersCount > 0 ? '#FFFFFF' : colors.foreground}
+            />
           </Pressable>
         </View>
       </View>
 
-      {/* ─── SEARCH & FILTER ROW ─── */}
-      <View style={styles.searchRow}>
-        <View style={[styles.searchBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Feather name="search" size={18} color={colors.mutedForeground} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search car, city, or category"
-            placeholderTextColor={colors.mutedForeground}
-            accessibilityLabel="Search cars"
-            style={[styles.searchInput, { color: colors.foreground }]}
-            returnKeyType="search"
-          />
-          {query.length > 0 && (
-            <Pressable onPress={() => setQuery('')} hitSlop={8}>
-              <Feather name="x-circle" size={16} color={colors.mutedForeground} />
-            </Pressable>
-          )}
-        </View>
-
+      {/* ─── 2. UNIVERSAL SEARCH BAR WITH GPS AUTO-DETECT BUTTON ─── */}
+      <View
+        style={[
+          styles.locationBar,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <Feather name="search" size={17} color={colors.primary} style={{ marginRight: 10 }} />
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search by car, brand, city (e.g. Civic, Lahore)..."
+          placeholderTextColor={colors.mutedForeground}
+          style={[styles.locationInput, { color: colors.foreground }]}
+        />
+        {searchQuery.length > 0 && (
+          <Pressable onPress={() => setSearchQuery('')} hitSlop={8} style={{ marginRight: 8 }}>
+            <Feather name="x-circle" size={16} color={colors.mutedForeground} />
+          </Pressable>
+        )}
+        {/* GPS Target Crosshair Button */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open filters"
-          onPress={() => setShowFilters(!showFilters)}
-          style={[styles.filterButton, { backgroundColor: showFilters ? colors.foreground : colors.accent }]}
+          accessibilityLabel="Detect current GPS location"
+          onPress={handleDetectGps}
+          style={[
+            styles.gpsDetectBtn,
+            {
+              backgroundColor: isLocating
+                ? 'rgba(177, 18, 38, 0.15)'
+                : colors.isDark
+                ? '#1E1E1E'
+                : '#F1F5F9',
+            },
+          ]}
         >
-          <Feather name="sliders" size={18} color={showFilters ? colors.background : '#ffffff'} />
-          {activeFilterCount > 0 && !showFilters && (
-            <View style={styles.filterDot} />
+          {isLocating ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Feather name="crosshair" size={17} color={colors.primary} />
           )}
         </Pressable>
       </View>
 
-      {/* ─── EXPANDABLE FILTER DRAWER ─── */}
-      {showFilters && (
-        <View style={[styles.filterDrawer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.drawerHeader}>
-            <Text style={[styles.drawerTitle, { color: colors.foreground }]}>Filter Options</Text>
-            {activeFilterCount > 0 && (
-              <Pressable
-                onPress={() => {
-                  setCategory('All');
-                  setCity('All cities');
-                  setMaxPrice(null);
-                }}
-              >
-                <Text style={[styles.resetText, { color: colors.accent }]}>Reset all</Text>
-              </Pressable>
-            )}
-          </View>
-
-          {/* City Chips */}
-          <Text style={[styles.filterLabel, { color: colors.mutedForeground }]}>CITY</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {cities.map((item) => (
-              <Pill key={item} label={item} selected={city === item} onPress={() => setCity(item)} />
-            ))}
-          </ScrollView>
-
-          {/* Budget */}
-          <Text style={[styles.filterLabel, { color: colors.mutedForeground, marginTop: 14 }]}>DAILY BUDGET</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {[null, 75, 125, 200].map((price) => (
-              <Pill
-                key={price ?? 'any'}
-                label={price ? `≤ $${price}` : 'Any budget'}
-                selected={maxPrice === price}
-                onPress={() => setMaxPrice(price)}
-              />
-            ))}
-          </ScrollView>
-
-          {/* Location Radius (Facebook Marketplace Style) */}
-          <Text style={[styles.filterLabel, { color: colors.mutedForeground, marginTop: 14 }]}>
-            RADIUS FILTER (FB MARKETPLACE)
-          </Text>
-          <Pressable
-            onPress={openModal}
-            style={[
-              styles.locationDrawerBtn,
-              {
-                backgroundColor: isFilterActive ? 'rgba(229,169,60,0.14)' : colors.secondary,
-                borderColor: isFilterActive ? colors.accent : colors.border,
-              },
-            ]}
-          >
-            <Feather name="map-pin" size={14} color={colors.accent} />
-            <Text style={[styles.locationDrawerBtnText, { color: colors.foreground }]}>
-              {currentCity.name} · {radiusKm} km radius
-            </Text>
-            {isFilterActive && (
-              <Pressable onPress={clearFilter} hitSlop={6} style={{ marginLeft: 'auto' }}>
-                <Text style={{ fontSize: 12, color: '#ff6b81', fontWeight: '600' }}>Reset</Text>
-              </Pressable>
-            )}
-          </Pressable>
-        </View>
-      )}
-
-      {/* ─── ACTIVE LOCATION BANNER ─── */}
-      {isFilterActive && (
-        <View style={[styles.locationBanner, { backgroundColor: colors.card, borderColor: 'rgba(229,169,60,0.3)' }]}>
-          <View style={styles.locationBannerLeft}>
-            <Feather name="navigation" size={14} color={colors.accent} />
-            <Text style={[styles.locationBannerText, { color: colors.foreground }]}>
-              Within <Text style={{ color: colors.accent, fontWeight: '700' }}>{radiusKm} km</Text> of{' '}
-              <Text style={{ fontWeight: '700' }}>{currentCity.name}</Text>
-            </Text>
-          </View>
-          <View style={styles.locationBannerActions}>
-            <Pressable onPress={openModal} hitSlop={6} style={styles.locationBannerBtn}>
-              <Text style={styles.locationBannerBtnText}>Change</Text>
-            </Pressable>
-            <Pressable onPress={clearFilter} hitSlop={6} style={styles.locationBannerResetBtn}>
-              <Text style={styles.locationBannerResetBtnText}>All</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
-
-      {/* ─── CATEGORY HORIZONTAL PILLS ─── */}
+      {/* ─── 3. BRAND HORIZONTAL QUICK-SELECTOR (Clean & Spacious) ─── */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoryScroll}
+        contentContainerStyle={styles.brandSelectorRow}
       >
-        {categories.map((item) => {
-          const isSelected = category === item;
+        {/* "All" Pill */}
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setSelectedBrand(null)}
+          style={[
+            styles.brandAllPill,
+            {
+              backgroundColor: selectedBrand === null ? colors.primary : colors.card,
+              borderColor: selectedBrand === null ? colors.primary : colors.border,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.brandAllText,
+              { color: selectedBrand === null ? '#FFFFFF' : colors.foreground },
+            ]}
+          >
+            All
+          </Text>
+        </Pressable>
+
+        {/* Brand Circular Badges */}
+        {POPULAR_BRANDS.map((item) => {
+          const isSelected = selectedBrand === item.query;
           return (
             <Pressable
-              key={item}
-              onPress={() => setCategory(item)}
+              key={item.name}
+              accessibilityRole="button"
+              accessibilityLabel={`Select ${item.name}`}
+              onPress={() =>
+                setSelectedBrand((prev) => (prev === item.query ? null : item.query))
+              }
               style={[
-                styles.categoryChip,
+                styles.brandSelectCircle,
                 {
-                  backgroundColor: isSelected ? colors.accent : colors.card,
-                  borderColor: isSelected ? colors.accent : colors.chipInactiveBorder,
+                  backgroundColor: colors.card,
+                  borderColor: isSelected ? colors.primary : colors.border,
+                  borderWidth: isSelected ? 2 : 1,
+                  transform: [{ scale: isSelected ? 1.05 : 1 }],
                 },
               ]}
             >
-              <Text
-                style={[
-                  styles.categoryChipText,
-                  {
-                    color: isSelected ? '#ffffff' : colors.foreground,
-                    fontWeight: isSelected ? '700' : '600',
-                  },
-                ]}
-              >
-                {item}
-              </Text>
+              <BrandLogo
+                brand={item.name}
+                size={26}
+                color={isSelected ? colors.primary : colors.foreground}
+              />
             </Pressable>
           );
         })}
       </ScrollView>
 
-      {/* ─── STATUS & COUNT ─── */}
-      <View style={styles.statusRow}>
-        <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
-          {filtered.length} {filtered.length === 1 ? 'ride available' : 'rides available'}
-          {category !== 'All' ? ` in ${category}` : ''}
-          {city !== 'All cities' ? ` (${city})` : ''}
-          {isFilterActive ? ` · ${radiusKm}km of ${currentCity.name}` : ''}
-        </Text>
+      {/* ─── 4. INTERACTIVE MAP COMPONENT (Prominent Maps, GPS, Radius) ─── */}
+      <InteractiveMap
+        vehicles={filteredVehicles}
+        onSelectCluster={(cluster) => {
+          const cleanCity = cluster.name.split('/')[0].trim();
+          const matched = PAKISTAN_CITIES.find(
+            (c) =>
+              cleanCity.toLowerCase().includes(c.name.toLowerCase()) ||
+              c.name.toLowerCase().includes(cleanCity.toLowerCase())
+          );
+          if (matched) {
+            applyLocation(matched, radiusKm);
+          }
+          setSearchQuery(cleanCity);
+        }}
+        onOpenMap={handleOpenFullMap}
+      />
+
+      {/* ─── 5. RESULTS HEADER (Sort Dropdown & Count) ─── */}
+      <View style={styles.resultsHeaderRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Change sorting order"
+          onPress={() => setSortModalVisible(true)}
+          style={[
+            styles.sortTriggerBtn,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          <Text style={[styles.sortTriggerLabel, { color: colors.foreground }]}>
+            Sort: <Text style={{ fontWeight: '700' }}>{sortLabel}</Text>
+          </Text>
+          <Feather name="chevron-down" size={13} color={colors.foreground} style={{ marginLeft: 4 }} />
+        </Pressable>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {isFilterActive && (
+            <Pressable
+              onPress={() => clearFilter()}
+              style={[styles.activeFilterChip, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+            >
+              <Feather name="map-pin" size={11} color={colors.primary} />
+              <Text style={[styles.activeFilterChipText, { color: colors.foreground }]}>
+                {radiusKm}km
+              </Text>
+              <Feather name="x" size={11} color={colors.mutedForeground} />
+            </Pressable>
+          )}
+
+          <Text style={[styles.resultsCountText, { color: colors.mutedForeground }]}>
+            {filteredVehicles.length} cars found
+          </Text>
+        </View>
       </View>
 
-      {apiError && <Notice text={`Live catalog unavailable. ${apiError}`} retry={() => void refresh()} />}
-
-      {/* ─── VEHICLE RESULTS (GRID OR LIST) ─── */}
-      {filtered.length === 0 ? (
-        <EmptyState
-          title={isFilterActive ? `No cars within ${radiusKm} km of ${currentCity.name}` : "No cars match those filters"}
-          detail={isFilterActive ? "Expand your search radius or reset to view all cars." : "Try another city, expand your budget, or choose a different category."}
-          action={isFilterActive ? "Expand to 500 km" : "Clear all filters"}
-          onAction={() => {
-            if (isFilterActive) {
-              applyLocation(currentCity, 500);
-            } else {
-              setQuery('');
-              setCategory('All');
-              setCity('All cities');
+      {/* ─── 6. VEHICLES LIST (Horizontal Cutout Cards with Distance) ─── */}
+      {filteredVehicles.length === 0 ? (
+        <View style={{ marginTop: 20 }}>
+          <EmptyState
+            title="No vehicles found"
+            detail="Try clearing filters, switching brands, or adjusting search location."
+            action="Reset Filters"
+            onAction={() => {
+              setSelectedBrand(null);
+              setSelectedCategory('All');
+              setSelectedTransmission(null);
               setMaxPrice(null);
-              clearFilter();
-            }
-          }}
-        />
-      ) : viewMode === 'grid' ? (
-        /* 2-Column Grid (Screen 1 style) */
-        <View style={styles.cardsGrid}>
-          {filtered.map((vehicle) => {
-            const isFav = favorites.includes(vehicle.id);
-            const dist = isFilterActive ? getDistanceToVehicle(vehicle) : null;
-            return (
-              <Pressable
-                key={vehicle.id}
-                onPress={() => router.push({ pathname: '/cars/[slug]', params: { slug: vehicle.slug } })}
-                style={[
-                  styles.gridCard,
-                  {
-                    width: cardWidth,
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <View style={[styles.gridImageWrap, { backgroundColor: colors.secondary }]}>
-                  <Image source={{ uri: vehicle.image }} contentFit="cover" style={styles.gridImage} transition={150} />
-                  {dist !== null && (
-                    <View style={styles.gridDistanceBadge}>
-                      <Feather name="map-pin" size={10} color="#E5A93C" />
-                      <Text style={styles.gridDistanceText}>{dist} km</Text>
-                    </View>
-                  )}
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      void toggleFavorite(vehicle.id);
-                    }}
-                    hitSlop={6}
-                    style={[styles.gridHeart, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  >
-                    <Feather name="heart" size={13} color={isFav ? colors.primary : colors.foreground} />
-                  </Pressable>
-                </View>
-                <View style={[styles.gridTagBlock, { backgroundColor: colors.darkCard }]}>
-                  <Text numberOfLines={1} style={styles.gridCategoryText}>{vehicle.category}</Text>
-                  <Text numberOfLines={1} style={styles.gridTitleText}>{vehicle.brand} {vehicle.model}</Text>
-                  <View style={styles.gridPriceRow}>
-                    <Text style={styles.gridPriceText}>${vehicle.pricePerDay}</Text>
-                    <Text style={styles.gridPerDayText}>/day</Text>
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })}
+            }}
+          />
         </View>
       ) : (
-        /* List Cards (Screen 3 style) */
-        <View style={{ gap: 12, marginBottom: 24 }}>
-          {filtered.map((vehicle) => {
-            const isFav = favorites.includes(vehicle.id);
-            const dist = isFilterActive ? getDistanceToVehicle(vehicle) : null;
-            return (
-              <Pressable
-                key={vehicle.id}
-                onPress={() => router.push({ pathname: '/cars/[slug]', params: { slug: vehicle.slug } })}
-                style={[styles.listCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-              >
-                <View style={[styles.listThumbWrap, { backgroundColor: colors.secondary }]}>
-                  <Image source={{ uri: vehicle.image }} contentFit="cover" style={styles.listThumb} transition={150} />
-                </View>
-                <View style={styles.listInfo}>
-                  <Text numberOfLines={1} style={[styles.listTitle, { color: colors.foreground }]}>
-                    {vehicle.brand} {vehicle.model}
-                  </Text>
-                  <Text numberOfLines={1} style={[styles.listMeta, { color: colors.mutedForeground }]}>
-                    {vehicle.category} · {vehicle.transmission}
-                    {dist !== null ? ` · 📍 ${dist} km away` : ` · ${vehicle.location.split(',')[0]}`}
-                  </Text>
-                  <View style={styles.listPriceRow}>
-                    <Text style={[styles.listPrice, { color: colors.foreground }]}>${vehicle.pricePerDay}</Text>
-                    <Text style={[styles.listPerDay, { color: colors.mutedForeground }]}> / day</Text>
-                  </View>
-                </View>
-                <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    void toggleFavorite(vehicle.id);
-                  }}
-                  hitSlop={8}
-                  style={[styles.listHeartBtn, { backgroundColor: colors.secondary }]}
-                >
-                  <Feather name="heart" size={16} color={isFav ? colors.primary : colors.foreground} />
-                </Pressable>
-              </Pressable>
-            );
-          })}
+        <View style={styles.vehiclesListWrap}>
+          {filteredVehicles.map((vehicle, index) => (
+            <VehicleCardSearchResult
+              key={vehicle.id}
+              vehicle={vehicle}
+              isFeatured={index < 3}
+              onPress={() =>
+                router.push({ pathname: '/cars/[slug]', params: { slug: vehicle.slug } })
+              }
+            />
+          ))}
         </View>
       )}
+
+      {/* ─── UNIFIED COMPREHENSIVE FILTER MODAL ─── */}
+      <Modal
+        visible={filterModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setFilterModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View
+            style={[
+              styles.filterSheet,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            {/* Modal Header */}
+            <View style={styles.modalHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Feather name="sliders" size={18} color={colors.primary} />
+                <Text style={[styles.filterSheetTitle, { color: colors.foreground }]}>
+                  Filter Vehicles
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setFilterModalVisible(false)}
+                style={[styles.modalCloseBtn, { backgroundColor: colors.secondary }]}
+              >
+                <Feather name="x" size={17} color={colors.foreground} />
+              </Pressable>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+              {/* Category / Body Type */}
+              <Text style={[styles.filterSectionLabel, { color: colors.mutedForeground }]}>
+                BODY TYPE / CATEGORY
+              </Text>
+              <View style={styles.filterOptionsWrap}>
+                {categories.map((cat) => {
+                  const isSelected = selectedCategory === cat;
+                  return (
+                    <Pressable
+                      key={cat}
+                      onPress={() => setSelectedCategory(cat)}
+                      style={[
+                        styles.filterChip,
+                        {
+                          backgroundColor: isSelected ? colors.primary : colors.secondary,
+                          borderColor: isSelected ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          {
+                            color: isSelected ? '#FFFFFF' : colors.foreground,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {cat}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Maximum Price / Day */}
+              <Text style={[styles.filterSectionLabel, { color: colors.mutedForeground, marginTop: 18 }]}>
+                MAXIMUM PRICE PER DAY
+              </Text>
+              <View style={styles.filterOptionsWrap}>
+                {[
+                  { label: 'Any Price', val: null },
+                  { label: '< $80', val: 80 },
+                  { label: '< $100', val: 100 },
+                  { label: '< $150', val: 150 },
+                  { label: '< $200', val: 200 },
+                ].map((item) => {
+                  const isSelected = maxPrice === item.val;
+                  return (
+                    <Pressable
+                      key={item.label}
+                      onPress={() => setMaxPrice(item.val)}
+                      style={[
+                        styles.filterChip,
+                        {
+                          backgroundColor: isSelected ? colors.primary : colors.secondary,
+                          borderColor: isSelected ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          {
+                            color: isSelected ? '#FFFFFF' : colors.foreground,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Transmission */}
+              <Text style={[styles.filterSectionLabel, { color: colors.mutedForeground, marginTop: 18 }]}>
+                TRANSMISSION
+              </Text>
+              <View style={styles.filterOptionsWrap}>
+                {[
+                  { label: 'Any', val: null },
+                  { label: 'Automatic', val: 'Automatic' },
+                  { label: 'Manual', val: 'Manual' },
+                ].map((item) => {
+                  const isSelected = selectedTransmission === item.val;
+                  return (
+                    <Pressable
+                      key={item.label}
+                      onPress={() => setSelectedTransmission(item.val)}
+                      style={[
+                        styles.filterChip,
+                        {
+                          backgroundColor: isSelected ? colors.primary : colors.secondary,
+                          borderColor: isSelected ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          {
+                            color: isSelected ? '#FFFFFF' : colors.foreground,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            {/* Bottom Actions: Reset and Apply */}
+            <View style={styles.filterActionRow}>
+              <Pressable
+                onPress={() => {
+                  setSelectedCategory('All');
+                  setMaxPrice(null);
+                  setSelectedTransmission(null);
+                  setFilterModalVisible(false);
+                }}
+                style={[styles.filterResetBtn, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.filterResetBtnText, { color: colors.foreground }]}>
+                  Reset
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setFilterModalVisible(false)}
+                style={[styles.filterApplyBtn, { backgroundColor: colors.primary }]}
+              >
+                <Text style={styles.filterApplyBtnText}>Apply Filters</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── SORT MODAL ─── */}
+      <Modal
+        visible={sortModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSortModalVisible(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setSortModalVisible(false)}>
+          <View
+            style={[
+              styles.sortModalCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[styles.sortModalTitle, { color: colors.foreground }]}>
+              Sort Available Cars
+            </Text>
+            {[
+              { id: 'popular', label: 'Most Popular' },
+              { id: 'price-asc', label: 'Price: Low to High' },
+              { id: 'price-desc', label: 'Price: High to Low' },
+            ].map((opt) => {
+              const isSelected = sortBy === opt.id;
+              return (
+                <Pressable
+                  key={opt.id}
+                  onPress={() => {
+                    setSortBy(opt.id as any);
+                    setSortModalVisible(false);
+                  }}
+                  style={[
+                    styles.sortChoiceRow,
+                    isSelected && { backgroundColor: colors.secondary },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.sortChoiceText,
+                      {
+                        color: isSelected ? colors.primary : colors.foreground,
+                        fontWeight: isSelected ? '700' : '500',
+                      },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                  {isSelected && <Feather name="check" size={16} color={colors.primary} />}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
     </Page>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    marginBottom: 16,
-  },
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.7,
-    marginBottom: 6,
-  },
-  titleRow: {
+  /* Header */
+  topHeaderRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 16,
+    marginTop: 4,
   },
-  title: {
-    fontSize: 32,
-    lineHeight: 36,
-    letterSpacing: -1,
-    fontWeight: '800',
-  },
-  viewToggleBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+  headerSquareBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  searchRow: {
+  headerTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+
+  /* Location Input Bar */
+  locationBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 14,
-  },
-  searchBox: {
-    flex: 1,
-    height: 52,
     borderRadius: 16,
     borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 14,
-    gap: 10,
+    paddingVertical: 10,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  searchInput: {
+  locationInput: {
     flex: 1,
     fontSize: 14,
+    fontWeight: '600',
+    paddingVertical: 2,
   },
-  filterButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
+  gpsDetectBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
   },
-  filterDot: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: '#ffffff',
+
+  /* Brand Selector Row */
+  brandSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingBottom: 4,
+    marginBottom: 6,
   },
-  filterDrawer: {
+  brandAllPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
     borderWidth: 1,
-    borderRadius: 22,
-    padding: 18,
-    marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 44,
   },
-  drawerHeader: {
+  brandAllText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  brandSelectCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+
+  /* Results Header */
+  resultsHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 12,
-  },
-  drawerTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  resetText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  filterLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-    marginBottom: 8,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  categoryScroll: {
-    gap: 8,
-    paddingBottom: 6,
-    marginBottom: 14,
-  },
-  categoryChip: {
-    borderRadius: 22,
-    borderWidth: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  categoryChipText: {
-    fontSize: 13,
-  },
-  statusRow: {
-    marginBottom: 14,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  /* 2-Column Grid (Screen 1 style) */
-  cardsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  gridCard: {
-    borderRadius: 22,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  gridImageWrap: {
-    height: 125,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  gridImage: {
-    width: '100%',
-    height: '100%',
-  },
-  gridHeart: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gridTagBlock: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 2,
-  },
-  gridCategoryText: {
-    fontSize: 9,
-    color: 'rgba(255, 255, 255, 0.65)',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  gridTitleText: {
-    fontSize: 13,
-    color: '#ffffff',
-    fontWeight: '700',
-  },
-  gridPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: 2,
-  },
-  gridPriceText: {
-    fontSize: 15,
-    color: '#ffffff',
-    fontWeight: '800',
-  },
-  gridPerDayText: {
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.65)',
-    marginLeft: 2,
-  },
-  /* List Cards (Screen 3 style) */
-  listCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 22,
-    padding: 12,
-    gap: 12,
-  },
-  listThumbWrap: {
-    width: 86,
-    height: 86,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  listThumb: {
-    width: '100%',
-    height: '100%',
-  },
-  listInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  listTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  listMeta: {
-    fontSize: 11,
-  },
-  listPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: 2,
-  },
-  listPrice: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  listPerDay: {
-    fontSize: 11,
-  },
-  listHeartBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  locationDrawerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
     marginTop: 6,
-    gap: 8,
   },
-  locationDrawerBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  locationBanner: {
+  sortTriggerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 14,
     borderWidth: 1,
-    marginBottom: 16,
-    gap: 10,
   },
-  locationBannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  locationBannerText: {
+  sortTriggerLabel: {
     fontSize: 12,
   },
-  locationBannerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  locationBannerBtn: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    backgroundColor: '#E5A93C',
-  },
-  locationBannerBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#000000',
-  },
-  locationBannerResetBtn: {
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  locationBannerResetBtnText: {
-    fontSize: 11,
+  resultsCountText: {
+    fontSize: 12,
     fontWeight: '600',
-    color: '#b0b3b8',
   },
-  gridDistanceBadge: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    borderRadius: 10,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+  activeFilterChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    zIndex: 2,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  gridDistanceText: {
-    color: '#E5A93C',
-    fontSize: 10,
+  activeFilterChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  /* Vehicles List */
+  vehiclesListWrap: {
+    marginTop: 4,
+  },
+
+  /* Modal Backdrop */
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+
+  /* Filter Sheet */
+  filterSheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    padding: 22,
+    maxHeight: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  filterSheetTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterSectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  filterOptionsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: 13,
+  },
+  filterActionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+    paddingTop: 12,
+  },
+  filterResetBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterResetBtnText: {
+    fontSize: 14,
     fontWeight: '700',
+  },
+  filterApplyBtn: {
+    flex: 2,
+    paddingVertical: 13,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterApplyBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  /* Sort Modal Card */
+  sortModalCard: {
+    width: '100%',
+    maxWidth: 320,
+    alignSelf: 'center',
+    marginBottom: 'auto',
+    marginTop: 'auto',
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  sortModalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+  sortChoiceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  sortChoiceText: {
+    fontSize: 14,
   },
 });

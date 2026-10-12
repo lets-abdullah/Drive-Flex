@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { EmptyState, Notice, Page, Pill } from '@/components/Marketplace';
+import { EmptyState, Notice, Page, Pill, VehicleCardHorizontal } from '@/components/Marketplace';
 import { categories, type Vehicle } from '@/data/catalog';
 import { useDriveFlex } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
@@ -222,44 +222,15 @@ export default function ViewAllCarsScreen() {
           })}
         </View>
       ) : (
-        /* ─── Horizontal List Cards (Screen 3 style) ─── */
+        /* ─── Horizontal List Cards (Screen 1 style) ─── */
         <View style={{ gap: 12, marginBottom: 24 }}>
-          {filtered.map((vehicle) => {
-            const isFav = favorites.includes(vehicle.id);
-            return (
-              <Pressable
-                key={vehicle.id}
-                onPress={() => router.push({ pathname: '/cars/[slug]', params: { slug: vehicle.slug } })}
-                style={[styles.listCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-              >
-                <View style={[styles.listThumbWrap, { backgroundColor: colors.secondary }]}>
-                  <Image source={{ uri: vehicle.image }} contentFit="cover" style={styles.listThumb} transition={150} />
-                </View>
-                <View style={styles.listInfo}>
-                  <Text numberOfLines={1} style={[styles.listTitle, { color: colors.foreground }]}>
-                    {vehicle.brand} {vehicle.model}
-                  </Text>
-                  <Text numberOfLines={1} style={[styles.listMeta, { color: colors.mutedForeground }]}>
-                    {vehicle.category} · {vehicle.transmission} · {vehicle.location.split(',')[0]}
-                  </Text>
-                  <View style={styles.listPriceRow}>
-                    <Text style={[styles.listPrice, { color: colors.foreground }]}>${vehicle.pricePerDay}</Text>
-                    <Text style={[styles.listPerDay, { color: colors.mutedForeground }]}> / day</Text>
-                  </View>
-                </View>
-                <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    void toggleFavorite(vehicle.id);
-                  }}
-                  hitSlop={8}
-                  style={[styles.listHeartBtn, { backgroundColor: colors.secondary }]}
-                >
-                  <Feather name="heart" size={16} color={isFav ? colors.primary : colors.foreground} />
-                </Pressable>
-              </Pressable>
-            );
-          })}
+          {filtered.map((vehicle) => (
+            <VehicleCardHorizontal
+              key={vehicle.id}
+              vehicle={vehicle}
+              onPress={() => router.push({ pathname: '/cars/[slug]', params: { slug: vehicle.slug } })}
+            />
+          ))}
         </View>
       )}
     </Page>

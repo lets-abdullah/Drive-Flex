@@ -1,3 +1,5 @@
+import { Alert } from 'react-native';
+import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getGetBookingsQueryKey,
@@ -96,10 +98,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   const toggleFavorite = useCallback(async (vehicleId: string) => {
+    if (!session) {
+      Alert.alert(
+        'Account Required',
+        'Please create an account or sign in to save vehicles to your favorites.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Create Account', onPress: () => router.push('/register') },
+          { text: 'Sign In', onPress: () => router.push('/sign-in') },
+        ]
+      );
+      return;
+    }
     const next = favorites.includes(vehicleId) ? favorites.filter((id) => id !== vehicleId) : [...favorites, vehicleId];
     setFavorites(next);
     await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
-  }, [favorites]);
+  }, [favorites, session]);
 
   const setSession = useCallback(async (value: Session | null) => {
     setSessionState(value);
@@ -108,11 +122,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveOwnerProfile = useCallback(async (profile: OwnerProfile) => {
+    if (!session) {
+      Alert.alert(
+        'Account Required',
+        'Please create an account or sign in to save host profiles and listings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Create Account', onPress: () => router.push('/register') },
+          { text: 'Sign In', onPress: () => router.push('/sign-in') },
+        ]
+      );
+      return;
+    }
     setOwnerProfile(profile);
     await AsyncStorage.setItem(OWNER_KEY, JSON.stringify(profile));
-  }, []);
+  }, [session]);
 
   const createBooking = useCallback(async (payload: BookingPayload) => {
+    if (!session) {
+      Alert.alert(
+        'Account Required',
+        'Please create an account or sign in to complete a booking.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Create Account', onPress: () => router.push('/register') },
+          { text: 'Sign In', onPress: () => router.push('/sign-in') },
+        ]
+      );
+      throw new Error('Account required to complete booking.');
+    }
     if (apiConfigured) {
       const response = await createBookingMutation.mutateAsync({ data: payload });
       await Promise.all([

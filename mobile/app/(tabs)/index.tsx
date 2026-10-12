@@ -1,5 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
@@ -10,812 +11,892 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Notice, Page } from '@/components/Marketplace';
-import { categories, type Vehicle } from '@/data/catalog';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { Page } from '@/components/Marketplace';
+import { BrandLogo, POPULAR_BRANDS } from '@/components/BrandLogos';
+import { VehicleCardFeatured } from '@/components/CardDesigns';
+import { type Vehicle } from '@/data/catalog';
 import { useDriveFlex } from '@/context/AppContext';
 import { useLocationFilter } from '@/context/LocationContext';
 import { useColors } from '@/hooks/useColors';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+interface HeroSlide {
+  id: string;
+  eyebrow: string;
+  headline: string;
+  subtitle: string;
+  ctaText: string;
+  ctaRoute: string;
+  image: any;
+}
+
+const HERO_SLIDES: HeroSlide[] = [
+  {
+    id: 'slide-1',
+    eyebrow: 'PREMIUM CAR RENTALS',
+    headline: 'Find your kind\nof drive.',
+    subtitle: 'Luxury, comfort, and performance —\nall in one place.',
+    ctaText: 'Explore Cars',
+    ctaRoute: '/(tabs)/search',
+    image: require('@/assets/images/hero-luxury-cars.jpg'),
+  },
+  {
+    id: 'slide-2',
+    eyebrow: 'EXECUTIVE & CHAUFFEUR',
+    headline: 'Arrive in\nunforgettable style.',
+    subtitle: 'Curated flagship sedans & grand tourers\nfor your finest moments.',
+    ctaText: 'View Collection',
+    ctaRoute: '/(tabs)/search',
+    image: require('@/assets/images/hero-slide-2-executive.jpg'),
+  },
+  {
+    id: 'slide-3',
+    eyebrow: 'NEXT-GEN ELECTRIC',
+    headline: 'Zero emissions.\nPure adrenaline.',
+    subtitle: 'Instant torque, smart range & seamless\ncontactless mobile key handovers.',
+    ctaText: 'Book Instant',
+    ctaRoute: '/(tabs)/search',
+    image: require('@/assets/images/hero-slide-3-electric.jpg'),
+  },
+];
+
 export default function HomeScreen() {
   const colors = useColors();
-  const { vehicles, apiConfigured, apiError, refresh, theme, toggleTheme, favorites, toggleFavorite } = useDriveFlex();
   const {
-    currentCity,
-    radiusKm,
-    isFilterActive,
-    openModal,
-    clearFilter,
-    applyLocation,
-    getDistanceToVehicle,
-    filterVehicles,
-  } = useLocationFilter();
-  const [selectedCategory, setSelectedCategory] = useState('All');
+    vehicles,
+    theme,
+    toggleTheme,
+    session,
+  } = useDriveFlex();
+  const { currentCity } = useLocationFilter();
 
-  // Filter vehicles by category and location radius on the home screen
-  const displayedVehicles = useMemo(() => {
-    let list = vehicles;
-    if (selectedCategory !== 'All') {
-      list = list.filter((v) => v.category === selectedCategory);
-    }
-    if (isFilterActive) {
-      list = filterVehicles(list);
-    }
-    return list;
-  }, [vehicles, selectedCategory, isFilterActive, filterVehicles]);
+  const [heroSlideIndex, setHeroSlideIndex] = useState(0);
+  const [heroCardWidth, setHeroCardWidth] = useState(SCREEN_WIDTH - 40);
+  const heroScrollRef = React.useRef<ScrollView>(null);
+  const activeSlide = HERO_SLIDES[heroSlideIndex] || HERO_SLIDES[0];
 
-  // Featured car for the hero card
-  const heroVehicle = vehicles[0] ?? {
-    image: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80',
-    brand: 'Toyota',
-    model: 'Fortuner',
+  // Curated featured cars for the horizontal carousel
+  const featuredCars = useMemo(() => {
+    const prioritySlugs = [
+      'mercedes-benz-c-class',
+      'bmw-3-series',
+      'tesla-model-3',
+      'audi-a4',
+      'mercedes-benz-a-class',
+      'bmw-i7-master',
+    ];
+
+    const sorted = [...vehicles].sort((a, b) => {
+      const idxA = prioritySlugs.indexOf(a.slug);
+      const idxB = prioritySlugs.indexOf(b.slug);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return b.rating - a.rating;
+    });
+
+    return sorted;
+  }, [vehicles]);
+
+  const handleBrandSelect = (brandQuery: string) => {
+    router.push({
+      pathname: '/(tabs)/search',
+      params: { brand: brandQuery },
+    });
   };
+
+  const userAvatarUri =
+    session?.role === 'host'
+      ? 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=200'
+      : 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=200';
 
   return (
     <Page tabbed>
-      {/* ─── 1. TOP BAR (Grid icon, Location pill, Theme Toggle & Profile) ─── */}
-      <View style={styles.topBar}>
-        <View style={[styles.iconButton, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Feather name="grid" size={20} color={colors.foreground} />
+      {/* ─── 1. TOP HEADER (DriveFlex Brand Title + Notification Bell + Profile Avatar) ─── */}
+      <View style={styles.topHeader}>
+        <View style={styles.brandTitleWrap}>
+          <Text style={[styles.brandTitle, { color: colors.foreground }]}>DriveFlex</Text>
         </View>
 
-        {/* Facebook-style location chip */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Change location and radius"
-          onPress={openModal}
-          style={[
-            styles.locationChip,
-            {
-              backgroundColor: isFilterActive ? 'rgba(229,169,60,0.15)' : colors.card,
-              borderColor: isFilterActive ? colors.accent : colors.border,
-            },
-          ]}
-        >
-          <Feather name="map-pin" size={12} color={colors.accent} />
-          <Text style={[styles.locationChipText, { color: isFilterActive ? colors.accent : colors.foreground }]}>
-            {currentCity.name} · {radiusKm} km
-          </Text>
-        </Pressable>
-
-        <View style={styles.topBarActions}>
+        <View style={styles.headerRightActions}>
+          {/* Theme Toggle (Light/Dark mode) */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            testID="theme-toggle"
             onPress={toggleTheme}
-            style={[styles.iconButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+            style={[styles.headerIconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           >
             <Feather
               name={theme === 'dark' ? 'sun' : 'moon'}
-              size={18}
+              size={17}
               color={colors.accent}
             />
           </Pressable>
 
+          {/* User Profile Avatar */}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Open profile"
-            testID="open-profile"
+            accessibilityLabel="View Profile"
             onPress={() => router.push('/(tabs)/profile')}
-            style={[styles.avatarButton, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+            style={[styles.avatarBtn, { borderColor: colors.border }]}
           >
-            <Feather name="user" size={19} color={colors.foreground} />
+            <Image
+              source={{ uri: userAvatarUri }}
+              contentFit="cover"
+              style={styles.avatarImage}
+            />
           </Pressable>
         </View>
       </View>
 
-      {/* ─── 2. MAIN HEADLINE ─── */}
-      <View style={styles.headlineSection}>
-        <Text style={[styles.headline, { color: colors.foreground }]}>
-          Find unique cars{'\n'}for your journey
-        </Text>
-      </View>
-
-      {/* ─── 3. SEARCH ROW WITH TERRACOTTA FILTER BUTTON ─── */}
-      <View style={styles.searchRow}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Search cars"
-          testID="home-search-bar"
-          onPress={() => router.push('/(tabs)/search')}
-          style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}
-        >
-          <Feather name="search" size={18} color={colors.mutedForeground} />
-          <Text style={[styles.searchPlaceholder, { color: colors.mutedForeground }]}>
-            Search cars, cities, models..
-          </Text>
-        </Pressable>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open search filters"
-          testID="home-filter-btn"
-          onPress={() => router.push('/(tabs)/search')}
-          style={[styles.filterButton, { backgroundColor: colors.accent }]}
-        >
-          <Feather name="sliders" size={18} color="#ffffff" />
-        </Pressable>
-      </View>
-
-      {/* ─── ACTIVE LOCATION RADIUS BANNER ─── */}
-      {isFilterActive && (
-        <View style={[styles.locationBanner, { backgroundColor: colors.card, borderColor: 'rgba(229,169,60,0.3)' }]}>
-          <View style={styles.locationBannerLeft}>
-            <Feather name="navigation" size={14} color={colors.accent} />
-            <Text style={[styles.locationBannerText, { color: colors.foreground }]}>
-              Within <Text style={{ color: colors.accent, fontWeight: '700' }}>{radiusKm} km</Text> of{' '}
-              <Text style={{ fontWeight: '700' }}>{currentCity.name}</Text>
-            </Text>
-          </View>
-          <View style={styles.locationBannerActions}>
-            <Pressable onPress={openModal} hitSlop={6} style={styles.locationBannerBtn}>
-              <Text style={styles.locationBannerBtnText}>Change</Text>
-            </Pressable>
-            <Pressable onPress={clearFilter} hitSlop={6} style={styles.locationBannerResetBtn}>
-              <Text style={styles.locationBannerResetBtnText}>All</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
-
-      {/* ─── 4. HERO PROMO BANNER CARD (Compact horizontal card matching reference) ─── */}
-      <View style={[styles.promoCard, { backgroundColor: colors.darkCard, borderColor: colors.border }]}>
-        <View style={styles.promoContent}>
-          <Text style={styles.promoEyebrow}>Up to</Text>
-          <Text style={styles.promoTitle}>30% Discount!</Text>
-          <Text style={styles.promoSubtitle}>Limited-time rental offers</Text>
-          <Pressable
-            accessibilityRole="button"
-            testID="hero-cta"
-            onPress={() => router.push('/(tabs)/search')}
-            style={({ pressed }) => [
-              styles.promoCta,
-              { backgroundColor: '#ffffff', opacity: pressed ? 0.88 : 1 },
-            ]}
-          >
-            <Text style={styles.promoCtaText}>Shop Now</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.promoImageContainer}>
-          <Image
-            source={{ uri: heroVehicle.image }}
-            contentFit="cover"
-            style={styles.promoImage}
-            transition={200}
-          />
-        </View>
-      </View>
-
-      {/* API Notices if needed */}
-      {!apiConfigured && (
-        <Notice text="Preview mode: sample cars and local bookings saved on device." />
-      )}
-      {apiError && (
-        <Notice
-          text={`Live catalog unavailable. ${apiError}`}
-          retry={() => void refresh()}
-        />
-      )}
-
-      {/* ─── 5. POPULAR ITEMS HEADER + CATEGORY PILLS ─── */}
-      <View style={styles.sectionHeaderRow}>
-        <Text style={[styles.sectionHeading, { color: colors.foreground }]}>Popular Items</Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/cars' as any)}
-          style={styles.viewAllRow}
-        >
-          <Text style={[styles.viewAllText, { color: colors.mutedForeground }]}>View all</Text>
-          <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
-        </Pressable>
-      </View>
-
-      {/* Category Pills Row */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoryScroll}
+      {/* ─── 2. HERO BANNER (Image as card background with readable text overlay & dots) ─── */}
+      <View
+        onLayout={(e) => {
+          const w = e.nativeEvent.layout.width;
+          if (w > 0 && Math.abs(w - heroCardWidth) > 1) {
+            setHeroCardWidth(w);
+          }
+        }}
+        style={[
+          styles.heroContainer,
+          {
+            backgroundColor: colors.isDark ? '#0F1318' : '#FFFFFF',
+            borderColor: colors.isDark ? '#212732' : colors.border,
+          },
+        ]}
       >
-        {categories.map((cat) => {
-          const isSelected = selectedCategory === cat;
-          return (
+        {/* Horizontal Swipeable Carousel (3 distinct designs one by one) */}
+        <ScrollView
+          ref={heroScrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          snapToInterval={heroCardWidth}
+          snapToAlignment="start"
+          onMomentumScrollEnd={(e) => {
+            const offset = e.nativeEvent.contentOffset.x;
+            const nextIdx = Math.round(offset / heroCardWidth);
+            if (nextIdx >= 0 && nextIdx < HERO_SLIDES.length && nextIdx !== heroSlideIndex) {
+              setHeroSlideIndex(nextIdx);
+            }
+          }}
+          scrollEventThrottle={16}
+          style={{ width: heroCardWidth, height: '100%' }}
+        >
+          {HERO_SLIDES.map((slide) => (
+            <View key={slide.id} style={[styles.heroSlideCard, { width: heroCardWidth }]}>
+              {/* Luxury Cars Background Image covering full card */}
+              <Image
+                source={slide.image}
+                contentFit="cover"
+                contentPosition="right center"
+                style={StyleSheet.absoluteFill}
+                transition={200}
+              />
+
+              {/* Theme-Aware Gradient Overlay for flawless left-aligned text legibility */}
+              <LinearGradient
+                colors={
+                  colors.isDark
+                    ? [
+                        'rgba(11, 15, 23, 0.96)',
+                        'rgba(11, 15, 23, 0.88)',
+                        'rgba(11, 15, 23, 0.40)',
+                        'rgba(11, 15, 23, 0.05)',
+                        'transparent',
+                      ]
+                    : [
+                        'rgba(255, 255, 255, 0.98)',
+                        'rgba(255, 255, 255, 0.90)',
+                        'rgba(255, 255, 255, 0.42)',
+                        'rgba(255, 255, 255, 0.08)',
+                        'transparent',
+                      ]
+                }
+                locations={[0, 0.35, 0.50, 0.70, 0.88]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+
+              {/* Left-Aligned Foreground Content */}
+              <View style={styles.heroForegroundContent}>
+                {/* Hero Eyebrow Pill */}
+                <View
+                  style={[
+                    styles.heroEyebrowPill,
+                    {
+                      backgroundColor: colors.isDark
+                        ? 'rgba(177, 18, 38, 0.18)'
+                        : 'rgba(177, 18, 38, 0.08)',
+                      borderColor: colors.isDark
+                        ? 'rgba(177, 18, 38, 0.35)'
+                        : 'rgba(177, 18, 38, 0.2)',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.heroEyebrow,
+                      { color: colors.primary },
+                    ]}
+                  >
+                    {slide.eyebrow}
+                  </Text>
+                </View>
+
+                {/* Hero Headline */}
+                <Text
+                  numberOfLines={2}
+                  style={[styles.heroHeadline, { color: colors.foreground }]}
+                >
+                  {slide.headline}
+                </Text>
+
+                {/* Hero Subtitle */}
+                <Text
+                  numberOfLines={2}
+                  style={[styles.heroSubtitle, { color: colors.mutedForeground }]}
+                >
+                  {slide.subtitle}
+                </Text>
+
+                {/* Explore CTA Button */}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={slide.ctaText}
+                  onPress={() => router.push(slide.ctaRoute as any)}
+                  style={({ pressed }) => [
+                    styles.heroCtaBtn,
+                    { backgroundColor: colors.primary },
+                    pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+                  ]}
+                >
+                  <Text style={styles.heroCtaBtnText}>{slide.ctaText}</Text>
+                  <Feather
+                    name="arrow-right"
+                    size={14}
+                    color="#FFFFFF"
+                    style={{ marginLeft: 5 }}
+                  />
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+
+        {/* Carousel indicator dots (• • •) anchored at bottom-right corner */}
+        <View style={styles.heroDotsRow} pointerEvents="box-none">
+          {HERO_SLIDES.map((_, idx) => (
             <Pressable
-              key={cat}
-              onPress={() => setSelectedCategory(cat)}
+              key={idx}
+              accessibilityRole="button"
+              accessibilityLabel={`Go to slide ${idx + 1}`}
+              onPress={() => {
+                setHeroSlideIndex(idx);
+                heroScrollRef.current?.scrollTo({ x: idx * heroCardWidth, animated: true });
+              }}
+              hitSlop={10}
               style={[
-                styles.categoryChip,
+                styles.heroDot,
                 {
-                  backgroundColor: isSelected ? colors.accent : colors.card,
-                  borderColor: isSelected ? colors.accent : colors.chipInactiveBorder,
+                  backgroundColor:
+                    idx === heroSlideIndex ? colors.primary : colors.mutedForeground,
+                  opacity: idx === heroSlideIndex ? 1 : 0.35,
+                  width: idx === heroSlideIndex ? 18 : 6,
                 },
               ]}
-            >
-              <Text
-                style={[
-                  styles.categoryChipText,
-                  {
-                    color: isSelected ? '#ffffff' : colors.foreground,
-                    fontWeight: isSelected ? '700' : '600',
-                  },
-                ]}
-              >
-                {cat}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {/* ─── 6. TWO-COLUMN PRODUCT CARDS GRID (Matching Screen 1 bottom cards) ─── */}
-      {displayedVehicles.length === 0 ? (
-        <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Feather name="map-pin" size={26} color={colors.accent} style={{ marginBottom: 8 }} />
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-            No listings within {radiusKm} km of {currentCity.name}
-          </Text>
-          <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>
-            Broaden your search radius to discover vehicles in nearby cities.
-          </Text>
-          <View style={styles.emptyActionsRow}>
-            {radiusKm < 250 && (
-              <Pressable
-                onPress={() => applyLocation(currentCity, 250)}
-                style={[styles.emptyBtn, { backgroundColor: colors.secondary }]}
-              >
-                <Text style={[styles.emptyBtnText, { color: colors.foreground }]}>Expand to 250 km</Text>
-              </Pressable>
-            )}
-            <Pressable
-              onPress={() => applyLocation(currentCity, 500)}
-              style={[styles.emptyBtn, { backgroundColor: colors.accent }]}
-            >
-              <Text style={[styles.emptyBtnText, { color: '#000000', fontWeight: '700' }]}>
-                Expand to 500 km
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.cardsGrid}>
-          {displayedVehicles.slice(0, 8).map((vehicle) => (
-            <GridCard
-              key={vehicle.id}
-              vehicle={vehicle}
-              isFavorite={favorites.includes(vehicle.id)}
-              onToggleFavorite={() => void toggleFavorite(vehicle.id)}
-              distance={isFilterActive ? getDistanceToVehicle(vehicle) : null}
             />
           ))}
         </View>
-      )}
-
-      {/* ─── 7. QUICK STATS ROW ─── */}
-      <View style={[styles.statsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={styles.statCol}>
-          <Text style={[styles.statNum, { color: colors.foreground }]}>{vehicles.length}+</Text>
-          <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Curated cars</Text>
-        </View>
-        <View style={[styles.statSep, { backgroundColor: colors.border }]} />
-        <View style={styles.statCol}>
-          <Text style={[styles.statNum, { color: colors.foreground }]}>3</Text>
-          <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Key cities</Text>
-        </View>
-        <View style={[styles.statSep, { backgroundColor: colors.border }]} />
-        <View style={styles.statCol}>
-          <Text style={[styles.statNum, { color: colors.foreground }]}>4.9</Text>
-          <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Host rating</Text>
-        </View>
       </View>
 
-      {/* ─── 8. HOST CARD BANNER ─── */}
-      <View style={[styles.hostBanner, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={[styles.hostIconBox, { backgroundColor: colors.secondary }]}>
-          <Feather name="key" size={18} color={colors.accent} />
+      {/* ─── 3. PROXIMITY QUICK ACTION ("Premium rides, closer to you") ─── */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Find premium rides closer to you"
+        onPress={() => router.push('/(tabs)/search')}
+        style={({ pressed }) => [
+          styles.proximityCard,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          },
+          pressed && { opacity: 0.94 },
+        ]}
+      >
+        <View
+          style={[
+            styles.proximityPinCircle,
+            { backgroundColor: colors.isDark ? 'rgba(177, 18, 38, 0.2)' : '#FDF0F2' },
+          ]}
+        >
+          <Feather name="map-pin" size={18} color={colors.primary} />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.hostHeading, { color: colors.foreground }]}>Have a car to share?</Text>
-          <Text style={[styles.hostSub, { color: colors.mutedForeground }]}>Earn by hosting on DriveFlex.</Text>
+
+        <View style={styles.proximityTextWrap}>
+          <Text style={[styles.proximityTitle, { color: colors.foreground }]}>
+            Premium rides, closer to you
+          </Text>
+          <Text style={[styles.proximitySub, { color: colors.mutedForeground }]}>
+            Find the perfect car for your next journey in {currentCity.name}
+          </Text>
         </View>
+
+        <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
+      </Pressable>
+
+      {/* ─── 4. EXPLORE BY BRAND SECTION ─── */}
+      <View style={styles.sectionHeaderRow}>
+        <View>
+          <Text style={[styles.sectionHeading, { color: colors.foreground }]}>
+            Explore by Brand
+          </Text>
+          <Text style={[styles.sectionSubheading, { color: colors.mutedForeground }]}>
+            Choose from top brands and find your match.
+          </Text>
+        </View>
+
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.push('/owner/onboard')}
-          style={[styles.hostArrow, { backgroundColor: colors.secondary }]}
+          accessibilityLabel="See all brands"
+          onPress={() => router.push('/(tabs)/search')}
         >
-          <Feather name="arrow-right" size={16} color={colors.foreground} />
+          <Text style={[styles.seeAllLink, { color: colors.primary }]}>See All</Text>
         </Pressable>
+      </View>
+
+      {/* Circular Brand Badges Horizontal Strip */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.brandsScroll}
+      >
+        {POPULAR_BRANDS.map((item) => (
+          <Pressable
+            key={item.name}
+            accessibilityRole="button"
+            accessibilityLabel={`Filter by ${item.name}`}
+            onPress={() => handleBrandSelect(item.query)}
+            style={({ pressed }) => [
+              styles.brandItem,
+              pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+            ]}
+          >
+            <View
+              style={[
+                styles.brandCircle,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <BrandLogo brand={item.name} size={30} color={colors.foreground} />
+            </View>
+            <Text style={[styles.brandItemLabel, { color: colors.foreground }]}>
+              {item.name}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      {/* ─── 5. FEATURED CARS SECTION (Horizontal Carousel) ─── */}
+      <View style={[styles.sectionHeaderRow, { marginTop: 24 }]}>
+        <View>
+          <Text style={[styles.sectionHeading, { color: colors.foreground }]}>
+            Featured Cars
+          </Text>
+          <Text style={[styles.sectionSubheading, { color: colors.mutedForeground }]}>
+            Top picks for your next ride
+          </Text>
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="View all featured cars"
+          onPress={() => router.push('/(tabs)/search')}
+        >
+          <Feather name="arrow-right" size={20} color={colors.primary} />
+        </Pressable>
+      </View>
+
+      {/* Horizontal Carousel of Featured Car Cards */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.featuredCarsScroll}
+      >
+        {featuredCars.slice(0, 6).map((vehicle) => (
+          <VehicleCardFeatured
+            key={vehicle.id}
+            vehicle={vehicle}
+            onPress={() =>
+              router.push({ pathname: '/cars/[slug]', params: { slug: vehicle.slug } })
+            }
+          />
+        ))}
+      </ScrollView>
+
+      {/* ─── 6. "FIND CARS NEAR YOU" MAP TEASER CARD (Maps, GPS, Radius) ─── */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Discover available cars near you on map"
+        onPress={() => router.push('/map')}
+        style={({ pressed }) => [
+          styles.mapTeaserCard,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          },
+          pressed && { opacity: 0.94 },
+        ]}
+      >
+        {/* Subtle SVG Map Graphic Background */}
+        <Svg
+          width="100%"
+          height="100%"
+          viewBox="0 0 340 76"
+          preserveAspectRatio="none"
+          style={StyleSheet.absoluteFill}
+        >
+          <Rect
+            x="0"
+            y="0"
+            width="340"
+            height="76"
+            fill={colors.isDark ? '#0C121A' : '#EFF5FA'}
+          />
+          {/* Subtle street lines */}
+          <Path
+            d="
+              M-10 25 Q100 20 220 30 T350 25
+              M-10 50 Q160 45 350 55
+              M40 0 L40 76
+              M120 0 L120 76
+              M200 0 L200 76
+              M280 0 L280 76
+            "
+            stroke={colors.isDark ? '#162433' : '#DDE8F0'}
+            strokeWidth="1.5"
+            fill="none"
+          />
+          <Path
+            d="M0 35 C90 40 180 50 340 55"
+            stroke={colors.isDark ? '#233A52' : '#CADCE8'}
+            strokeWidth="3.5"
+            fill="none"
+          />
+        </Svg>
+
+        <View style={styles.mapTeaserContent}>
+          {/* Pulsing Crimson Pin Circle */}
+          <View
+            style={[
+              styles.mapTeaserPinWrap,
+              {
+                backgroundColor: colors.isDark ? 'rgba(177, 18, 38, 0.25)' : '#FDE8EB',
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.mapTeaserPinInner,
+                { backgroundColor: colors.primary },
+              ]}
+            >
+              <Feather name="navigation" size={13} color="#FFFFFF" />
+            </View>
+          </View>
+
+          <View style={styles.mapTeaserTextWrap}>
+            <Text style={[styles.mapTeaserTitle, { color: colors.foreground }]}>
+              Find cars near you
+            </Text>
+            <Text style={[styles.mapTeaserSub, { color: colors.mutedForeground }]}>
+              Discover available cars in {currentCity.name} on the map.
+            </Text>
+          </View>
+
+          <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
+        </View>
+      </Pressable>
+
+      {/* ─── 7. DARK PROMO CARD ("Drive the extraordinary") ─── */}
+      <View style={styles.promoCardContainer}>
+        {/* Deep dark luxury styling */}
+        <View style={styles.promoDarkCard}>
+          <View style={styles.promoLeftContent}>
+            <Text style={styles.promoTitle}>Drive the extraordinary</Text>
+            <Text style={styles.promoSubtitle}>
+              Premium cars for every occasion.
+            </Text>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Book Now"
+              onPress={() => router.push('/(tabs)/search')}
+              style={({ pressed }) => [
+                styles.promoBtn,
+                { backgroundColor: colors.primary },
+                pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+              ]}
+            >
+              <Text style={styles.promoBtnText}>Book Now</Text>
+            </Pressable>
+          </View>
+
+          {/* Car Headlights Front Graphic */}
+          <View style={styles.promoRightVisual}>
+            <Image
+              source={{
+                uri: 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=600&q=80',
+              }}
+              contentFit="cover"
+              style={styles.promoHeadlightImage}
+            />
+          </View>
+        </View>
       </View>
     </Page>
   );
 }
 
-/**
- * 2-Column Product Card modeled after Screen 1 in the reference image
- */
-function GridCard({
-  vehicle,
-  isFavorite,
-  onToggleFavorite,
-  distance,
-}: {
-  vehicle: Vehicle;
-  isFavorite: boolean;
-  onToggleFavorite: () => void;
-  distance?: number | null;
-}) {
-  const colors = useColors();
-  const screenWidth = Dimensions.get('window').width;
-  // Account for 20px padding on each side (40px) and 12px gap
-  const cardWidth = Math.max(150, (screenWidth - 52) / 2);
-
-  return (
-    <Pressable
-      accessibilityLabel={`View ${vehicle.brand} ${vehicle.model}`}
-      onPress={() => router.push({ pathname: '/cars/[slug]', params: { slug: vehicle.slug } })}
-      style={({ pressed }) => [
-        styles.gridCard,
-        {
-          width: cardWidth,
-          backgroundColor: colors.card,
-          borderColor: colors.border,
-          opacity: pressed ? 0.92 : 1,
-        },
-      ]}
-    >
-      {/* Image enclosure */}
-      <View style={[styles.gridImageWrap, { backgroundColor: colors.secondary }]}>
-        <Image
-          source={{ uri: vehicle.image }}
-          contentFit="cover"
-          style={styles.gridImage}
-          transition={160}
-        />
-        {/* Distance Badge if location filter is active */}
-        {distance !== null && distance !== undefined && (
-          <View style={styles.gridDistanceBadge}>
-            <Feather name="map-pin" size={10} color="#E5A93C" />
-            <Text style={styles.gridDistanceText}>{distance} km</Text>
-          </View>
-        )}
-        {/* Heart button */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={isFavorite ? 'Remove from favorites' : 'Save to favorites'}
-          onPress={(e) => {
-            e.stopPropagation();
-            onToggleFavorite();
-          }}
-          hitSlop={6}
-          style={[styles.gridHeart, { backgroundColor: colors.card, borderColor: colors.border }]}
-        >
-          <Feather
-            name="heart"
-            size={13}
-            color={isFavorite ? colors.primary : colors.foreground}
-          />
-        </Pressable>
-      </View>
-
-      {/* Bottom tag block matching the dark pill in reference */}
-      <View style={[styles.gridTagBlock, { backgroundColor: colors.darkCard }]}>
-        <Text numberOfLines={1} style={styles.gridCategoryText}>
-          {vehicle.category}
-        </Text>
-        <Text numberOfLines={1} style={styles.gridTitleText}>
-          {vehicle.brand} {vehicle.model}
-        </Text>
-        <View style={styles.gridPriceRow}>
-          <Text style={styles.gridPriceText}>${vehicle.pricePerDay}</Text>
-          <Text style={styles.gridPerDayText}>/day</Text>
-        </View>
-      </View>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  topBar: {
+  /* Header */
+  topHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    height: 48,
     marginBottom: 16,
-    gap: 8,
+    marginTop: 2,
   },
-  locationChip: {
-    flex: 1,
+  brandTitleWrap: {
+    height: 40,
+    justifyContent: 'center',
+  },
+  brandTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: -0.6,
+    lineHeight: 28,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    height: 40,
+  },
+  headerIconBtn: {
+    width: 40,
     height: 40,
     borderRadius: 20,
     borderWidth: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    gap: 6,
-  },
-  locationChipText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  locationBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 16,
-    gap: 10,
-  },
-  locationBannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  locationBannerText: {
-    fontSize: 12,
-  },
-  locationBannerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  locationBannerBtn: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    backgroundColor: '#E5A93C',
-  },
-  locationBannerBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#000000',
-  },
-  locationBannerResetBtn: {
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  locationBannerResetBtnText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#b0b3b8',
-  },
-  emptyCard: {
-    padding: 24,
-    borderRadius: 20,
-    borderWidth: 1,
-    alignItems: 'center',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  emptyTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  emptySub: {
-    fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 14,
-  },
-  emptyActionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  emptyBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-  },
-  emptyBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  gridDistanceBadge: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    borderRadius: 10,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    zIndex: 2,
-  },
-  gridDistanceText: {
-    color: '#E5A93C',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  topBarActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  /* 2. Headline */
-  headlineSection: {
-    marginBottom: 16,
-  },
-  headline: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-  },
-
-  /* 3. Search Row */
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 18,
-  },
-  searchBar: {
-    flex: 1,
-    height: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    gap: 10,
-  },
-  searchPlaceholder: {
-    fontSize: 14,
-  },
-  filterButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  /* 4. Hero Promo Banner Card */
-  promoCard: {
-    minHeight: 155,
-    borderRadius: 24,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    overflow: 'hidden',
-    marginBottom: 22,
     position: 'relative',
   },
-  promoContent: {
-    flex: 1.15,
-    paddingLeft: 20,
+  notificationBadgeDot: {
+    position: 'absolute',
+    top: 9,
+    right: 9,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  avatarBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  /* Hero Section */
+  heroContainer: {
+    height: 230,
+    borderRadius: 24,
+    borderWidth: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  heroSlideCard: {
+    height: 230,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  heroForegroundContent: {
+    width: '48%',
+    maxWidth: 185,
+    height: '100%',
+    paddingLeft: 18,
+    paddingRight: 6,
     paddingVertical: 18,
     justifyContent: 'center',
-    zIndex: 2,
+    zIndex: 10,
   },
-  promoEyebrow: {
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.72)',
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  promoTitle: {
-    fontSize: 22,
-    lineHeight: 26,
-    fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: -0.5,
-  },
-  promoSubtitle: {
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.72)',
-    marginTop: 3,
-    marginBottom: 14,
-  },
-  promoCta: {
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+  heroEyebrowPill: {
     alignSelf: 'flex-start',
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 8,
   },
-  promoCtaText: {
-    color: '#18181a',
+  heroEyebrow: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.7,
+  },
+  heroHeadline: {
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 24,
+    letterSpacing: -0.4,
+    marginBottom: 6,
+  },
+  heroSubtitle: {
+    fontSize: 10.5,
+    lineHeight: 14.5,
+    marginBottom: 12,
+  },
+  heroCtaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 15,
+    paddingVertical: 7.5,
+    borderRadius: 20,
+    shadowColor: '#B11226',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.28,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  heroCtaBtnText: {
+    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
   },
-  promoImageContainer: {
-    flex: 0.95,
-    height: 155,
-    overflow: 'hidden',
-    justifyContent: 'center',
+  heroDotsRow: {
+    position: 'absolute',
+    bottom: 14,
+    right: 18,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 5,
+    zIndex: 20,
   },
-  promoImage: {
-    width: '100%',
-    height: '100%',
-    opacity: 0.92,
+  heroDot: {
+    height: 5,
+    borderRadius: 2.5,
   },
 
-  /* 5. Popular Items & Categories */
+  /* Proximity Card */
+  proximityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 14,
+    gap: 12,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  proximityPinCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  proximityTextWrap: {
+    flex: 1,
+  },
+  proximityTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  proximitySub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  /* Section Header */
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   sectionHeading: {
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-  },
-  viewAllRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  viewAllText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  categoryScroll: {
-    gap: 8,
-    paddingBottom: 6,
-    marginBottom: 16,
-  },
-  categoryChip: {
-    borderRadius: 22,
-    borderWidth: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  categoryChipText: {
-    fontSize: 13,
-  },
-
-  /* 6. 2-Column Cards Grid */
-  cardsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'space-between',
-    marginBottom: 22,
-  },
-  gridCard: {
-    borderRadius: 22,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  gridImageWrap: {
-    height: 125,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  gridImage: {
-    width: '100%',
-    height: '100%',
-  },
-  gridHeart: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gridTagBlock: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 2,
-  },
-  gridCategoryText: {
-    fontSize: 9,
-    color: 'rgba(255, 255, 255, 0.65)',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  gridTitleText: {
-    fontSize: 13,
-    color: '#ffffff',
-    fontWeight: '700',
-  },
-  gridPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: 2,
-  },
-  gridPriceText: {
-    fontSize: 15,
-    color: '#ffffff',
+    fontSize: 18,
     fontWeight: '800',
+    letterSpacing: -0.3,
   },
-  gridPerDayText: {
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.65)',
-    marginLeft: 2,
-  },
-
-  /* 7. Stats Card */
-  statsCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginBottom: 16,
-  },
-  statCol: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statNum: {
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  statLabel: {
+  sectionSubheading: {
     fontSize: 11,
     marginTop: 2,
   },
-  statSep: {
-    width: 1,
-    height: 26,
+  seeAllLink: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 
-  /* 8. Host Banner */
-  hostBanner: {
+  /* Brands Strip */
+  brandsScroll: {
+    paddingRight: 20,
+    gap: 14,
+  },
+  brandItem: {
+    alignItems: 'center',
+    width: 58,
+  },
+  brandCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  brandItemLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+
+  /* Featured Cars Horizontal Scroll */
+  featuredCarsScroll: {
+    paddingRight: 20,
+  },
+
+  /* Map Teaser Card */
+  mapTeaserCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    overflow: 'hidden',
+    position: 'relative',
+    marginTop: 22,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  mapTeaserContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 14,
     gap: 12,
-    borderWidth: 1,
-    borderRadius: 22,
-    padding: 16,
-    marginBottom: 8,
   },
-  hostIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
+  mapTeaserPinWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  hostHeading: {
+  mapTeaserPinInner: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapTeaserTextWrap: {
+    flex: 1,
+  },
+  mapTeaserTitle: {
     fontSize: 14,
     fontWeight: '700',
   },
-  hostSub: {
-    fontSize: 12,
+  mapTeaserSub: {
+    fontSize: 11,
     marginTop: 2,
   },
-  hostArrow: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+
+  /* Dark Promo Card */
+  promoCardContainer: {
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  promoDarkCard: {
+    backgroundColor: '#0D1117',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#21262D',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'hidden',
+    padding: 16,
+    position: 'relative',
+    minHeight: 120,
+  },
+  promoLeftContent: {
+    flex: 1.1,
+    zIndex: 2,
+  },
+  promoTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  promoSubtitle: {
+    color: '#94A3B8',
+    fontSize: 11,
+    marginBottom: 14,
+  },
+  promoBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 18,
+    alignSelf: 'flex-start',
+  },
+  promoBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  promoRightVisual: {
+    flex: 0.9,
+    height: 100,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  promoHeadlightImage: {
+    width: '100%',
+    height: '100%',
   },
 });

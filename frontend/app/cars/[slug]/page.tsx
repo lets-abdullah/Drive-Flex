@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ChevronLeft, MapPin, ShieldCheck, Star, Users, Loader2 } from 'lucide-react';
+import { ChevronLeft, MapPin, ShieldCheck, Star, Users, Loader2, RotateCw, Compass, X } from 'lucide-react';
 import { Layout } from '@/components/layout';
 import { VehicleCard } from '@/components/vehicles/vehicle-card';
 import { OwnerIdentity } from '@/components/owners/owner-identity';
@@ -136,6 +136,51 @@ export default function CarDetailPage() {
                   <div className="spec"><label>Host</label><strong>Verified</strong></div>
                 </div>
                 <BookingWidget vehicle={vehicle} />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── FULL SPECIFICATIONS SECTION (Moved to Car Details Bottom) ─── */}
+        <section className="section-tight" style={{ padding: '2.5rem 0', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="container">
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div className="eyebrow" style={{ color: '#c9a227' }}>COMPREHENSIVE VEHICLE DATA</div>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.02em', margin: '0.25rem 0' }}>
+                Full Technical Specifications
+              </h2>
+              <p className="muted" style={{ fontSize: '0.9rem', maxWidth: '600px' }}>
+                Factory-verified performance metrics, dimensions, transmission, powertrain, and driver assistance capabilities.
+              </p>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: '1rem',
+            }}>
+              <div className="spec-card-clean" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '1.25rem' }}>
+                <span style={{ fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Powertrain & Engine</span>
+                <strong style={{ display: 'block', fontSize: '1.15rem', color: '#fff', marginTop: '0.35rem' }}>{(vehicle as any).specs?.engine || vehicle.engine || '2.0L Turbocharged I4'}</strong>
+                <span style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.25rem', display: 'block' }}>Power: {(vehicle as any).specs?.horsepower || vehicle.horsepower || '255 HP / Performance Tuned'}</span>
+              </div>
+
+              <div className="spec-card-clean" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '1.25rem' }}>
+                <span style={{ fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Transmission</span>
+                <strong style={{ display: 'block', fontSize: '1.15rem', color: '#fff', marginTop: '0.35rem' }}>{(vehicle as any).specs?.transmission || vehicle.transmission || 'Automatic'}</strong>
+                <span style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.25rem', display: 'block' }}>Drive: All-Wheel / Rear Drive</span>
+              </div>
+
+              <div className="spec-card-clean" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '1.25rem' }}>
+                <span style={{ fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fuel & Efficiency</span>
+                <strong style={{ display: 'block', fontSize: '1.15rem', color: '#fff', marginTop: '0.35rem' }}>{(vehicle as any).specs?.fuelType || vehicle.fuelType || 'Gasoline'}</strong>
+                <span style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.25rem', display: 'block' }}>Usage: {(vehicle as any).specs?.mileage || vehicle.mileage || '10 L / 100 km'}</span>
+              </div>
+
+              <div className="spec-card-clean" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '1.25rem' }}>
+                <span style={{ fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Seating & Wheels</span>
+                <strong style={{ display: 'block', fontSize: '1.15rem', color: '#fff', marginTop: '0.35rem' }}>{vehicle.seats} Passengers</strong>
+                <span style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.25rem', display: 'block' }}>Wheels: {(vehicle as any).specs?.wheels || vehicle.wheels || '19" Premium Alloy'}</span>
               </div>
             </div>
           </div>

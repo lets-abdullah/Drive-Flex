@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 export default function OwnerOnboardingScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { ownerProfile, saveOwnerProfile } = useDriveFlex();
+  const { ownerProfile, saveOwnerProfile, session } = useDriveFlex();
   const [name, setName] = useState(ownerProfile?.fullName ?? '');
   const [business, setBusiness] = useState(ownerProfile?.businessName ?? '');
   const [email, setEmail] = useState(ownerProfile?.email ?? '');
@@ -24,6 +24,18 @@ export default function OwnerOnboardingScreen() {
   const top = Platform.OS === 'web' ? Math.max(67, insets.top) : insets.top;
 
   const submit = async () => {
+    if (!session) {
+      Alert.alert(
+        'Account Required',
+        'Please create an account or sign in before saving your host profile or vehicle listing.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Create Account', onPress: () => router.push('/register') },
+          { text: 'Sign In', onPress: () => router.push('/sign-in') },
+        ]
+      );
+      return;
+    }
     if (!name.trim() || !business.trim() || !email.includes('@') || !city.trim()) {
       Alert.alert('Complete the host profile', 'Add your name, business, a valid email, and city.');
       return;

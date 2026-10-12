@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import React, { type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -17,9 +18,12 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import type { Vehicle } from '@/data/catalog';
 import { useDriveFlex } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
+import { dateIsUnavailable, daysBetween, isoDate, shortDate } from '@/lib/dates';
+import { resolveLocationCoords } from '@/lib/location-data';
 
 export function Page({
   children,
@@ -119,8 +123,8 @@ export function Pill({ label, selected = false, onPress }: { label: string; sele
       style={[
         styles.pill,
         {
-          borderColor: selected ? colors.accent : colors.chipInactiveBorder,
-          backgroundColor: selected ? colors.accent : colors.chipInactiveBg,
+          borderColor: selected ? colors.primary : colors.chipInactiveBorder,
+          backgroundColor: selected ? colors.primary : colors.chipInactiveBg,
         },
       ]}
     >
@@ -128,7 +132,7 @@ export function Pill({ label, selected = false, onPress }: { label: string; sele
         style={[
           styles.pillText,
           {
-            color: selected ? colors.accentForeground : colors.chipInactiveText,
+            color: selected ? '#FFFFFF' : colors.chipInactiveText,
             fontWeight: selected ? '700' : '600',
           },
         ]}
@@ -139,10 +143,39 @@ export function Pill({ label, selected = false, onPress }: { label: string; sele
   );
 }
 
-export function VehicleCard({ vehicle, compact = false }: { vehicle: Vehicle; compact?: boolean }) {
+export function HorizontalRail({
+  children,
+  style,
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={[styles.horizontalRailContent, style]}
+      style={styles.horizontalRail}
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
+export function VehicleCard({
+  vehicle,
+  compact = false,
+  distanceText,
+}: {
+  vehicle: Vehicle;
+  compact?: boolean;
+  distanceText?: string | null;
+}) {
   const colors = useColors();
   const { favorites, toggleFavorite } = useDriveFlex();
   const isFavorite = favorites.includes(vehicle.id);
+  const locationLabel = distanceText || vehicle.location.split(',')[0];
+
   return (
     <View
       style={[
@@ -150,7 +183,7 @@ export function VehicleCard({ vehicle, compact = false }: { vehicle: Vehicle; co
         {
           backgroundColor: colors.card,
           borderColor: colors.border,
-          width: compact ? 260 : '100%',
+          width: compact ? 275 : '100%',
         },
       ]}
     >
@@ -166,10 +199,20 @@ export function VehicleCard({ vehicle, compact = false }: { vehicle: Vehicle; co
         ]}
       >
         <Image source={{ uri: vehicle.image }} contentFit="cover" style={styles.vehicleImage} transition={180} />
+        
+        {/* Category Pill Tag */}
         <View style={[styles.cardBadge, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.cardBadgeText, { color: colors.foreground }]}>{vehicle.category.toUpperCase()}</Text>
         </View>
+
+        {/* Verified Host Seal on Card */}
+        <View style={styles.verifiedHostSeal}>
+          <Feather name="shield" size={11} color="#10B981" />
+          <Text style={styles.verifiedHostText}>Verified</Text>
+        </View>
       </Pressable>
+
+      {/* Heart Favorite Button */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={isFavorite ? 'Remove from favorites' : 'Save to favorites'}
@@ -177,29 +220,73 @@ export function VehicleCard({ vehicle, compact = false }: { vehicle: Vehicle; co
         onPress={() => void toggleFavorite(vehicle.id)}
         style={[styles.heartButton, { backgroundColor: colors.card, borderColor: colors.border }]}
       >
-        <Feather name="heart" size={16} color={isFavorite ? colors.primary : colors.foreground} />
+        <Feather name="heart" size={16} color={isFavorite ? colors.primary : colors.mutedForeground} />
       </Pressable>
+
+      {/* Card Content & Metrics */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`View ${vehicle.brand} ${vehicle.model}`}
         onPress={() => router.push({ pathname: '/cars/[slug]', params: { slug: vehicle.slug } })}
-        style={({ pressed }) => [styles.vehicleInfo, pressed && { opacity: 0.84 }]}
+        style={({ pressed }) => [styles.vehicleInfo, pressed && { opacity: 0.88 }]}
       >
+        {/* Title & Rating */}
         <View style={styles.vehicleTitleRow}>
           <Text numberOfLines={1} style={[styles.vehicleTitle, { color: colors.foreground }]}>
             {vehicle.brand} {vehicle.model}
           </Text>
           <View style={styles.ratingRow}>
             <Feather name="star" size={13} color={colors.star} />
-            <Text style={[styles.ratingText, { color: colors.foreground }]}>{vehicle.rating.toFixed(1)}</Text>
+            <Text style={[styles.ratingText, { color: colors.star }]}>
+              {vehicle.rating.toFixed(2)}
+            </Text>
           </View>
         </View>
-        <Text numberOfLines={1} style={[styles.vehicleMeta, { color: colors.mutedForeground }]}>
-          {vehicle.location.split(',')[0]} · {vehicle.seats} seats · {vehicle.transmission}
-        </Text>
-        <View style={styles.priceRow}>
-          <Text style={[styles.price, { color: colors.foreground }]}>${vehicle.pricePerDay.toLocaleString()}</Text>
-          <Text style={[styles.perDay, { color: colors.mutedForeground }]}> / day</Text>
+
+        {/* Concept 3 Inline 4-Metric Strip */}
+        <View style={styles.metricStrip}>
+          <View style={[styles.metricChip, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+            <Feather name="user" size={10} color={colors.mutedForeground} />
+            <Text style={[styles.metricChipText, { color: colors.foreground }]}>{vehicle.seats} Seats</Text>
+          </View>
+          <View style={[styles.metricChip, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+            <Feather name="settings" size={10} color={colors.mutedForeground} />
+            <Text style={[styles.metricChipText, { color: colors.foreground }]}>
+              {vehicle.transmission === 'Automatic' ? 'Auto' : 'Manual'}
+            </Text>
+          </View>
+          <View style={[styles.metricChip, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+            <Feather name="zap" size={10} color={colors.mutedForeground} />
+            <Text style={[styles.metricChipText, { color: colors.foreground }]}>{vehicle.fuelType || 'Gas'}</Text>
+          </View>
+          <View style={[styles.metricChip, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+            <Feather name="map-pin" size={10} color={colors.accent} />
+            <Text numberOfLines={1} style={[styles.metricChipText, { color: colors.foreground, maxWidth: 80 }]}>
+              {locationLabel}
+            </Text>
+          </View>
+        </View>
+
+        {/* Pricing Anchor Stack & Quick Action */}
+        <View style={styles.pricingAnchorRow}>
+          <View>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+              <Text style={[styles.priceTabular, { color: colors.foreground }]}>
+                ${vehicle.pricePerDay.toLocaleString()}
+              </Text>
+              <Text style={[styles.perDay, { color: colors.mutedForeground }]}> / day</Text>
+            </View>
+            {vehicle.reviewCount ? (
+              <Text style={[styles.reviewCountText, { color: colors.mutedForeground }]}>
+                ({vehicle.reviewCount} verified reviews)
+              </Text>
+            ) : null}
+          </View>
+
+          <View style={[styles.bookNowBtn, { backgroundColor: colors.primary }]}>
+            <Text style={styles.bookNowBtnText}>Reserve</Text>
+            <Feather name="arrow-right" size={13} color="#FFFFFF" />
+          </View>
         </View>
       </Pressable>
     </View>
@@ -327,6 +414,703 @@ export function Avatar({ uri, size = 44 }: { uri?: string; size?: number }) {
   );
 }
 
+/**
+ * Screen 1: Available Cars horizontal card matching design reference
+ */
+export function VehicleCardHorizontal({
+  vehicle,
+  onPress,
+}: {
+  vehicle: Vehicle;
+  onPress?: () => void;
+}) {
+  const colors = useColors();
+  const { favorites, toggleFavorite } = useDriveFlex();
+  const isFavorite = favorites.includes(vehicle.id);
+
+  const handlePress = () => {
+    if (onPress) {
+      onPress();
+    } else {
+      router.push({ pathname: '/cars/[slug]', params: { slug: vehicle.slug } });
+    }
+  };
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={`View ${vehicle.brand} ${vehicle.model}`}
+      style={({ pressed }) => [
+        styles.horizontalCard,
+        {
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+        },
+        pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
+      ]}
+    >
+      {/* Left side: Clean vehicle cutout */}
+      <View style={[styles.horizontalCardImageWrap, { backgroundColor: colors.isDark ? '#111111' : '#F3F4F6' }]}>
+        <Image
+          source={{ uri: vehicle.image }}
+          contentFit="cover"
+          style={styles.horizontalCardImage}
+          transition={200}
+        />
+      </View>
+
+      {/* Right side: Information */}
+      <View style={styles.horizontalCardBody}>
+        {/* Top: Title & Favorite Heart */}
+        <View style={styles.horizontalCardHeader}>
+          <Text numberOfLines={1} style={[styles.horizontalCardTitle, { color: colors.foreground }]}>
+            {vehicle.brand} {vehicle.model}
+          </Text>
+          <Pressable
+            hitSlop={8}
+            onPress={(e) => {
+              e.stopPropagation();
+              void toggleFavorite(vehicle.id);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            <Feather
+              name="heart"
+              size={17}
+              color={isFavorite ? colors.primary : colors.mutedForeground}
+            />
+          </Pressable>
+        </View>
+
+        {/* Price: Bold $XX/day */}
+        <View style={styles.horizontalPriceRow}>
+          <Text style={[styles.horizontalPriceNumber, { color: colors.foreground }]}>
+            ${vehicle.pricePerDay}
+          </Text>
+          <Text style={[styles.horizontalPricePerDay, { color: colors.mutedForeground }]}>
+            /day
+          </Text>
+        </View>
+
+        {/* Specs: 3 micro-pills (seats, transmission, fuel) */}
+        <View style={styles.horizontalSpecsRow}>
+          <View style={styles.horizontalSpecItem}>
+            <Feather name="user" size={11} color={colors.mutedForeground} />
+            <Text style={[styles.horizontalSpecText, { color: colors.mutedForeground }]}>
+              {vehicle.seats} seats
+            </Text>
+          </View>
+          <View style={styles.horizontalSpecItem}>
+            <Feather name="settings" size={11} color={colors.mutedForeground} />
+            <Text style={[styles.horizontalSpecText, { color: colors.mutedForeground }]}>
+              {vehicle.transmission === 'Automatic' ? 'Automatic' : 'Manual'}
+            </Text>
+          </View>
+          <View style={styles.horizontalSpecItem}>
+            <Feather name="zap" size={11} color={colors.mutedForeground} />
+            <Text style={[styles.horizontalSpecText, { color: colors.mutedForeground }]}>
+              {vehicle.fuelType}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * Screen 3: "Most popular car" card matching design reference
+ */
+export function VehicleCardPopular({
+  vehicle,
+  onPress,
+}: {
+  vehicle: Vehicle;
+  onPress?: () => void;
+}) {
+  const colors = useColors();
+  const { favorites, toggleFavorite } = useDriveFlex();
+  const isFavorite = favorites.includes(vehicle.id);
+
+  const handlePress = () => {
+    if (onPress) {
+      onPress();
+    } else {
+      router.push({ pathname: '/cars/[slug]', params: { slug: vehicle.slug } });
+    }
+  };
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={`View ${vehicle.brand} ${vehicle.model}`}
+      style={({ pressed }) => [
+        styles.popularCard,
+        {
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+        },
+        pressed && { opacity: 0.94, transform: [{ scale: 0.99 }] },
+      ]}
+    >
+      {/* Top row: Price and Heart icon */}
+      <View style={styles.popularCardTopRow}>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+          <Text style={[styles.popularPriceBold, { color: colors.foreground }]}>
+            {vehicle.pricePerDay}$
+          </Text>
+          <Text style={[styles.popularPricePerDay, { color: colors.mutedForeground }]}>
+            / day
+          </Text>
+        </View>
+
+        <Pressable
+          hitSlop={8}
+          onPress={(e) => {
+            e.stopPropagation();
+            void toggleFavorite(vehicle.id);
+          }}
+          accessibilityRole="button"
+        >
+          <Feather
+            name="heart"
+            size={18}
+            color={isFavorite ? colors.primary : colors.mutedForeground}
+          />
+        </Pressable>
+      </View>
+
+      {/* Center: Vehicle Studio Image */}
+      <View style={styles.popularCardImageContainer}>
+        <Image
+          source={{ uri: vehicle.image }}
+          contentFit="cover"
+          style={styles.popularCardImage}
+          transition={200}
+        />
+      </View>
+
+      {/* Bottom row: Vehicle Name and Rating */}
+      <View style={styles.popularCardBottomRow}>
+        <Text numberOfLines={1} style={[styles.popularCardTitle, { color: colors.foreground }]}>
+          {vehicle.brand} {vehicle.model}
+        </Text>
+        <View style={styles.popularRatingBadge}>
+          <Feather name="star" size={13} color={colors.star} />
+          <Text style={[styles.popularRatingText, { color: colors.foreground }]}>
+            {vehicle.rating.toFixed(1)}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * Screen 4: 2x2 Specification Quadrant Grid matching design reference
+ */
+export function SpecQuadrantGrid({ vehicle }: { vehicle: Vehicle }) {
+  const colors = useColors();
+
+  const specs = [
+    { label: 'Seats', value: `${vehicle.seats}` },
+    { label: 'Fuel type', value: vehicle.fuelType || 'Petrol' },
+    { label: 'Transmission', value: vehicle.transmission || 'Automatic' },
+    { label: 'Fuel usage', value: vehicle.fuelUsage || '10 l / 100 km' },
+  ];
+
+  return (
+    <View style={styles.specGridContainer}>
+      {specs.map((item, index) => (
+        <View
+          key={index}
+          style={[
+            styles.specTile,
+            {
+              backgroundColor: colors.isDark ? '#141414' : '#F6F7F9',
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <Text style={[styles.specTileLabel, { color: colors.mutedForeground }]}>
+            {item.label}
+          </Text>
+          <Text style={[styles.specTileValue, { color: colors.foreground }]}>
+            {item.value}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * Screen 4: "Last activity" card matching design reference
+ */
+export function LastActivityCard({ vehicle }: { vehicle: Vehicle }) {
+  const colors = useColors();
+  const activities = vehicle.lastActivity ?? [
+    {
+      renter: 'Andrew Dellington',
+      avatar: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=200',
+      dateRange: '21 Sep, 22 - 9 Oct, 22',
+      distance: '670 km',
+    },
+    {
+      renter: 'Katy Jameson',
+      avatar: 'https://images.pexels.com/photos/3769021/pexels-photo-3769021.jpeg?auto=compress&cs=tinysrgb&w=200',
+      dateRange: '12 Aug, 22 - 17 Aug, 22',
+      distance: '276 km',
+    },
+  ];
+
+  return (
+    <View
+      style={[
+        styles.contextCard,
+        {
+          backgroundColor: colors.isDark ? '#141414' : '#FFFFFF',
+          borderColor: colors.border,
+        },
+      ]}
+    >
+      <Text style={[styles.contextCardHeader, { color: colors.foreground }]}>
+        Last activity
+      </Text>
+      <View style={{ gap: 12, marginTop: 10 }}>
+        {activities.map((act, i) => (
+          <View key={i} style={styles.activityRow}>
+            <Image
+              source={{ uri: act.avatar }}
+              style={styles.activityAvatar}
+              contentFit="cover"
+            />
+            <View style={{ flex: 1 }}>
+              <Text numberOfLines={1} style={[styles.activityRenterName, { color: colors.foreground }]}>
+                {act.renter}
+              </Text>
+              <Text style={[styles.activityDateRange, { color: colors.mutedForeground }]}>
+                {act.dateRange}
+              </Text>
+              <Text style={[styles.activityDistance, { color: colors.accent }]}>
+                {act.distance}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Screen 4: "Location" proper interactive map card matching design reference
+ * Displays real cartographic map preview of car's listed hub, with clickable deep link to Google/Apple Maps.
+ */
+export function LocationMiniCard({ vehicle }: { vehicle: Vehicle }) {
+  const colors = useColors();
+  const address = vehicle.pickupAddress || vehicle.location || 'Lahore, Pakistan';
+  const dist = vehicle.distanceKm || '1.2 km';
+  const duration = vehicle.durationEta || '14 min';
+
+  const coords = resolveLocationCoords(address) || { lat: 31.5204, lng: 74.3587, name: 'Lahore' };
+
+  const handleOpenMaps = () => {
+    const query = encodeURIComponent(`${vehicle.brand} ${vehicle.model} - ${address}`);
+    const lat = coords.lat;
+    const lng = coords.lng;
+
+    const url = Platform.select({
+      ios: `maps:0,0?q=${query}@${lat},${lng}`,
+      android: `geo:${lat},${lng}?q=${lat},${lng}(${query})`,
+      default: `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,
+    });
+
+    Linking.openURL(url!).catch(() => {
+      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`);
+    });
+  };
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Open location for ${vehicle.brand} ${vehicle.model} in maps`}
+      onPress={handleOpenMaps}
+      style={({ pressed }) => [
+        styles.contextCard,
+        {
+          backgroundColor: colors.isDark ? '#141414' : '#FFFFFF',
+          borderColor: colors.border,
+        },
+        pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
+      ]}
+    >
+      <View style={styles.locationHeaderRow}>
+        <Text style={[styles.contextCardHeader, { color: colors.foreground, marginBottom: 0 }]}>
+          Location
+        </Text>
+        <View style={styles.openMapActionBadge}>
+          <Text style={[styles.openMapActionText, { color: colors.accent }]}>Google Maps</Text>
+          <Feather name="external-link" size={10} color={colors.accent} style={{ marginLeft: 3 }} />
+        </View>
+      </View>
+
+      {/* Stylized Cartographic Map Thumbnail with Street Grids & Pin */}
+      <View style={[styles.miniMapGraphic, { backgroundColor: colors.isDark ? '#0D1117' : '#E8EEF5' }]}>
+        <Svg width="100%" height="100%" viewBox="0 0 160 70">
+          {/* Water channel / River accent */}
+          <Path
+            d="M -10 50 Q 40 40 80 55 T 180 45"
+            stroke={colors.isDark ? '#16283D' : '#BFDBFE'}
+            strokeWidth="10"
+            fill="none"
+          />
+          {/* Secondary road network */}
+          <Path
+            d="M 10 -5 L 45 75 M 120 -5 L 145 75 M -5 30 L 170 30 M -5 12 L 170 12 M 70 -5 L 65 75"
+            stroke={colors.isDark ? '#21262D' : '#CBD5E1'}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+          {/* Main Expressway (e.g. Ring Road / GT Road) */}
+          <Path
+            d="M -10 65 Q 60 15 170 20"
+            stroke={colors.isDark ? '#30363D' : '#94A3B8'}
+            strokeWidth="4.5"
+            fill="none"
+          />
+          {/* Road center highlight */}
+          <Path
+            d="M -10 65 Q 60 15 170 20"
+            stroke={colors.isDark ? 'rgba(201, 162, 39, 0.4)' : '#F59E0B'}
+            strokeWidth="1.2"
+            strokeDasharray="4,3"
+            fill="none"
+          />
+          {/* Radar ripple rings around car marker */}
+          <Circle
+            cx="80"
+            cy="35"
+            r="18"
+            fill={colors.primary}
+            fillOpacity={0.15}
+          />
+          <Circle
+            cx="80"
+            cy="35"
+            r="11"
+            fill={colors.primary}
+            fillOpacity={0.25}
+          />
+          {/* Car Marker Pin */}
+          <Circle
+            cx="80"
+            cy="35"
+            r="7"
+            fill={colors.primary}
+          />
+          <Circle
+            cx="80"
+            cy="35"
+            r="2.5"
+            fill="#FFFFFF"
+          />
+        </Svg>
+
+        {/* Live GPS Tag */}
+        <View style={styles.liveGpsBadge}>
+          <View style={styles.liveGpsDot} />
+          <Text style={styles.liveGpsText}>{coords.name || 'GPS Hub'}</Text>
+        </View>
+      </View>
+
+      <Text numberOfLines={2} style={[styles.locationAddressText, { color: colors.foreground }]}>
+        {address}
+      </Text>
+
+      <View style={styles.locationPillRow}>
+        <Text style={[styles.locationPillText, { color: colors.mutedForeground }]}>
+          {dist}
+        </Text>
+        <Text style={{ color: colors.mutedForeground }}>·</Text>
+        <Text style={[styles.locationPillText, { color: colors.mutedForeground }]}>
+          {duration}
+        </Text>
+        <Text style={{ color: colors.mutedForeground }}>·</Text>
+        <Text style={[styles.locationPillText, { color: colors.accent, fontWeight: '700' }]}>
+          Maps ↗
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * Interactive Month-by-Month Calendar for selecting Pick-up and Return Dates
+ */
+export function RentalCalendarView({
+  pickup,
+  returnDate,
+  onSelectPickup,
+  onSelectReturnDate,
+  vehicle,
+  title = 'Select Rental Dates',
+}: {
+  pickup: string;
+  returnDate: string;
+  onSelectPickup: (date: string) => void;
+  onSelectReturnDate: (date: string) => void;
+  vehicle?: Vehicle;
+  title?: string;
+}) {
+  const colors = useColors();
+  const [selecting, setSelecting] = React.useState<'pickup' | 'returnDate'>('pickup');
+  const [currentMonth, setCurrentMonth] = React.useState(() => {
+    const d = pickup ? new Date(`${pickup}T12:00:00`) : new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+
+  const nextMonth = () => {
+    setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const prevMonth = () => {
+    setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
+  const monthName = currentMonth.toLocaleDateString('en', { month: 'long', year: 'numeric' });
+
+  const firstDayOfWeek = new Date(year, month, 1).getDay(); // 0 = Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const daysArray = React.useMemo(() => {
+    const arr: (number | null)[] = [];
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      arr.push(null);
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      arr.push(d);
+    }
+    return arr;
+  }, [firstDayOfWeek, daysInMonth]);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const daysCount = daysBetween(pickup, returnDate);
+  const dailyPrice = vehicle?.pricePerDay || 0;
+  const totalPrice = daysCount * dailyPrice;
+
+  const handleDayPress = (day: number) => {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    if (vehicle && dateIsUnavailable(vehicle, dateStr)) return;
+
+    if (selecting === 'pickup') {
+      onSelectPickup(dateStr);
+      if (dateStr >= returnDate) {
+        const dt = new Date(`${dateStr}T12:00:00`);
+        dt.setDate(dt.getDate() + 1);
+        onSelectReturnDate(isoDate(dt));
+      }
+      setSelecting('returnDate');
+    } else {
+      if (dateStr > pickup) {
+        onSelectReturnDate(dateStr);
+        setSelecting('pickup');
+      } else {
+        onSelectPickup(dateStr);
+        const dt = new Date(`${dateStr}T12:00:00`);
+        dt.setDate(dt.getDate() + 1);
+        onSelectReturnDate(isoDate(dt));
+        setSelecting('returnDate');
+      }
+    }
+  };
+
+  const dayHeaders = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+  return (
+    <View
+      style={[
+        styles.calendarContainer,
+        {
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+        },
+      ]}
+    >
+      {/* ─── Header: Title & Active Selection Tabs ─── */}
+      <View style={styles.calendarHeaderRow}>
+        <View style={styles.calendarTitleWrap}>
+          <Feather name="calendar" size={17} color={colors.primary} />
+          <Text style={[styles.calendarTitle, { color: colors.foreground }]}>{title}</Text>
+        </View>
+      </View>
+
+      {/* ─── Departure vs Return Choice Chips ─── */}
+      <View style={styles.calendarChoiceRow}>
+        <Pressable
+          onPress={() => setSelecting('pickup')}
+          style={[
+            styles.calendarChoiceChip,
+            {
+              backgroundColor: selecting === 'pickup' ? colors.secondary : 'transparent',
+              borderColor: selecting === 'pickup' ? colors.primary : colors.border,
+            },
+          ]}
+        >
+          <Text style={[styles.calendarChoiceLabel, { color: colors.mutedForeground }]}>
+            PICK-UP DATE
+          </Text>
+          <Text
+            style={[
+              styles.calendarChoiceVal,
+              { color: selecting === 'pickup' ? colors.primary : colors.foreground },
+            ]}
+          >
+            {shortDate(pickup)}
+          </Text>
+        </Pressable>
+
+        <View style={styles.calendarChoiceArrow}>
+          <Feather name="arrow-right" size={16} color={colors.mutedForeground} />
+        </View>
+
+        <Pressable
+          onPress={() => setSelecting('returnDate')}
+          style={[
+            styles.calendarChoiceChip,
+            {
+              backgroundColor: selecting === 'returnDate' ? colors.secondary : 'transparent',
+              borderColor: selecting === 'returnDate' ? colors.primary : colors.border,
+            },
+          ]}
+        >
+          <Text style={[styles.calendarChoiceLabel, { color: colors.mutedForeground }]}>
+            RETURN DATE
+          </Text>
+          <Text
+            style={[
+              styles.calendarChoiceVal,
+              { color: selecting === 'returnDate' ? colors.primary : colors.foreground },
+            ]}
+          >
+            {shortDate(returnDate)}
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* ─── Month Navigation ─── */}
+      <View style={styles.calendarNavRow}>
+        <Pressable
+          hitSlop={10}
+          onPress={prevMonth}
+          style={[styles.calendarNavBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+        >
+          <Feather name="chevron-left" size={18} color={colors.foreground} />
+        </Pressable>
+
+        <Text style={[styles.calendarMonthName, { color: colors.foreground }]}>
+          {monthName}
+        </Text>
+
+        <Pressable
+          hitSlop={10}
+          onPress={nextMonth}
+          style={[styles.calendarNavBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+        >
+          <Feather name="chevron-right" size={18} color={colors.foreground} />
+        </Pressable>
+      </View>
+
+      {/* ─── Weekday Headers (Su, Mo, Tu, We, Th, Fr, Sa) ─── */}
+      <View style={styles.calendarWeekRow}>
+        {dayHeaders.map((dh, i) => (
+          <Text key={i} style={[styles.calendarWeekHeader, { color: colors.mutedForeground }]}>
+            {dh}
+          </Text>
+        ))}
+      </View>
+
+      {/* ─── Day Grid Cells ─── */}
+      <View style={styles.calendarDaysGrid}>
+        {daysArray.map((day, idx) => {
+          if (day === null) {
+            return <View key={`blank-${idx}`} style={styles.calendarDayCell} />;
+          }
+
+          const cellDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const cellDateTime = new Date(`${cellDateStr}T12:00:00`);
+          const isPast = cellDateTime.getTime() < today.getTime();
+          const isUnavailable = vehicle ? dateIsUnavailable(vehicle, cellDateStr) : false;
+          const isPickup = cellDateStr === pickup;
+          const isReturn = cellDateStr === returnDate;
+          const isInRange = cellDateStr > pickup && cellDateStr < returnDate;
+
+          return (
+            <View
+              key={`day-${day}`}
+              style={[
+                styles.calendarDayCell,
+                isInRange && { backgroundColor: 'rgba(177, 18, 38, 0.12)' },
+                isPickup && styles.calendarDayPickupWrap,
+                isReturn && styles.calendarDayReturnWrap,
+              ]}
+            >
+              <Pressable
+                disabled={isPast || isUnavailable}
+                onPress={() => handleDayPress(day)}
+                style={[
+                  styles.calendarDayBtn,
+                  (isPickup || isReturn) && { backgroundColor: colors.primary },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.calendarDayText,
+                    { color: colors.foreground },
+                    (isPickup || isReturn) && { color: '#FFFFFF', fontWeight: '800' },
+                    isInRange && { color: colors.primary, fontWeight: '700' },
+                    (isPast || isUnavailable) && { color: colors.mutedForeground, opacity: 0.3 },
+                  ]}
+                >
+                  {day}
+                </Text>
+              </Pressable>
+            </View>
+          );
+        })}
+      </View>
+
+      {/* ─── Bottom Summary Row ─── */}
+      <View style={[styles.calendarSummaryBar, { borderTopColor: colors.border }]}>
+        <View style={styles.calendarDurationPill}>
+          <Feather name="clock" size={13} color={colors.accent} />
+          <Text style={[styles.calendarDurationText, { color: colors.foreground }]}>
+            {daysCount} {daysCount === 1 ? 'Day' : 'Days'} Duration
+          </Text>
+        </View>
+
+        {dailyPrice > 0 && (
+          <View style={styles.calendarPriceSummary}>
+            <Text style={[styles.calendarPriceEst, { color: colors.foreground }]}>
+              Est. ${totalPrice}
+            </Text>
+            <Text style={[styles.calendarPricePerDay, { color: colors.mutedForeground }]}>
+              (${dailyPrice}/day)
+            </Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   brandIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
@@ -354,6 +1138,53 @@ const styles = StyleSheet.create({
   priceRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 12 },
   price: { fontSize: 19, fontWeight: '800' },
   perDay: { fontSize: 12 },
+  horizontalRail: { marginVertical: 6 },
+  horizontalRailContent: { paddingHorizontal: 4, paddingRight: 24, alignItems: 'center' },
+  verifiedHostSeal: {
+    position: 'absolute',
+    left: 14,
+    bottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(10, 10, 10, 0.78)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+  },
+  verifiedHostText: { fontSize: 10, fontWeight: '700', color: '#10B981', letterSpacing: 0.3 },
+  metricStrip: { flexDirection: 'row', flexWrap: 'nowrap', gap: 6, marginTop: 10, marginBottom: 12 },
+  metricChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  metricChipText: { fontSize: 11, fontWeight: '600' },
+  pricingAnchorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(128, 128, 128, 0.15)',
+  },
+  priceTabular: { fontSize: 19, fontWeight: '800' },
+  reviewCountText: { fontSize: 11, marginTop: 2 },
+  bookNowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 14,
+  },
+  bookNowBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   button: { minHeight: 52, paddingHorizontal: 20, borderRadius: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   buttonText: { fontSize: 15, fontWeight: '700' },
   fieldLabel: { fontSize: 12, fontWeight: '600' },
@@ -364,4 +1195,390 @@ const styles = StyleSheet.create({
   emptyIcon: { width: 52, height: 52, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { fontSize: 17, fontWeight: '700', textAlign: 'center' },
   emptyDetail: { fontSize: 13, lineHeight: 19, textAlign: 'center', marginBottom: 4 },
+
+  /* Screen 1: Horizontal Card Styles */
+  horizontalCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 12,
+    gap: 12,
+  },
+  horizontalCardImageWrap: {
+    width: 110,
+    height: 80,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  horizontalCardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  horizontalCardBody: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  horizontalCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  horizontalCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
+  },
+  horizontalPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  horizontalPriceNumber: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  horizontalPricePerDay: {
+    fontSize: 12,
+  },
+  horizontalSpecsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  horizontalSpecItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  horizontalSpecText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+
+  /* Screen 3: Popular Car Card Styles */
+  popularCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 16,
+  },
+  popularCardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  popularPriceBold: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  popularPricePerDay: {
+    fontSize: 13,
+  },
+  popularCardImageContainer: {
+    width: '100%',
+    height: 140,
+    marginVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  popularCardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  popularCardBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 4,
+  },
+  popularCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
+  },
+  popularRatingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  popularRatingText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  /* Screen 4: 2x2 Spec Quadrant Grid */
+  specGridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginVertical: 18,
+  },
+  specTile: {
+    width: '48%',
+    flexGrow: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  specTileLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  specTileValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+
+  /* Screen 4: Context & Dual Cards (Activity & Location) */
+  contextCard: {
+    flex: 1,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 14,
+  },
+  contextCardHeader: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  activityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  activityAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  activityRenterName: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  activityDateRange: {
+    fontSize: 10,
+    marginTop: 1,
+  },
+  activityDistance: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  miniMapGraphic: {
+    height: 68,
+    borderRadius: 12,
+    position: 'relative',
+    marginVertical: 8,
+    overflow: 'hidden',
+  },
+  locationHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  openMapActionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: 'rgba(201, 162, 39, 0.12)',
+  },
+  openMapActionText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  liveGpsBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+  },
+  liveGpsDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#10B981',
+  },
+  liveGpsText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  locationAddressText: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginBottom: 6,
+  },
+  locationPillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  locationPillText: {
+    fontSize: 10.5,
+    fontWeight: '600',
+  },
+
+  /* RentalCalendarView Styles */
+  calendarContainer: {
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 16,
+    marginVertical: 14,
+  },
+  calendarHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  calendarTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  calendarTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  calendarChoiceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  calendarChoiceChip: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  calendarChoiceLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  calendarChoiceVal: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  calendarChoiceArrow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    paddingHorizontal: 4,
+  },
+  calendarNavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarMonthName: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  calendarWeekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 8,
+  },
+  calendarWeekHeader: {
+    width: 38,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  calendarDaysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDayCell: {
+    width: `${100 / 7}%`,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 1,
+  },
+  calendarDayPickupWrap: {
+    borderTopLeftRadius: 21,
+    borderBottomLeftRadius: 21,
+    backgroundColor: 'rgba(177, 18, 38, 0.2)',
+  },
+  calendarDayReturnWrap: {
+    borderTopRightRadius: 21,
+    borderBottomRightRadius: 21,
+    backgroundColor: 'rgba(177, 18, 38, 0.2)',
+  },
+  calendarDayBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarDayText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  calendarSummaryBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 14,
+    marginTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  calendarDurationPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  calendarDurationText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  calendarPriceSummary: {
+    alignItems: 'flex-end',
+  },
+  calendarPriceEst: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  calendarPricePerDay: {
+    fontSize: 11,
+    marginTop: 1,
+  },
 });

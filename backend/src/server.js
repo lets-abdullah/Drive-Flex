@@ -5,6 +5,8 @@ const connectDB = require('./db');
 const vehicleRoutes = require('./routes/vehicle.routes');
 const bookingRoutes = require('./routes/booking.routes');
 const authRoutes = require('./routes/auth.routes');
+const hostRoutes = require('./routes/host.routes');
+const renterRoutes = require('./routes/renter.routes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -13,7 +15,7 @@ const app = express();
 app.use(cors({
   origin: '*', // Allow all origins for dev/demo, can restrict to config.frontendUrl in prod
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-user-role'],
 }));
 
 app.use(express.json());
@@ -45,6 +47,9 @@ app.get('/api', (req, res) => {
     endpoints: {
       vehicles: '/api/vehicles',
       bookings: '/api/bookings',
+      auth: '/api/auth',
+      host: '/api/host',
+      renter: '/api/renter',
     },
   });
 });
@@ -53,6 +58,8 @@ app.get('/api', (req, res) => {
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/host', hostRoutes);
+app.use('/api/renter', renterRoutes);
 
 // 404 Route Handler
 app.use((req, res) => {
