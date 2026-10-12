@@ -608,8 +608,11 @@ export const demoVehicles: Vehicle[] = [
     year: 2024,
     status: 'available',
     description: 'The pinnacle of luxury motoring. Uncompromising comfort, acoustic isolation, and state-of-the-art assistance.',
-    image: 'https://images.unsplash.com/photo-1622353219448-466020524fc2?auto=format&fit=crop&w=1200&q=80',
-    gallery: [],
+    image: 'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1200&q=80',
+    gallery: [
+      'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1200&q=80',
+      'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1200&q=80',
+    ],
     ownerId: 'owner-sana',
     host_id: 'owner-sana',
     provider: 'Sana Auto Collective',

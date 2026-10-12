@@ -76,7 +76,7 @@ export default function OwnerOnboardingScreen() {
     >
       <Text
         accessibilityRole="button"
-        onPress={() => router.back()}
+        onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
         style={{ color: colors.mutedForeground, fontSize: 13, marginBottom: 21 }}
       >
         <Feather name="arrow-left" size={16} color={colors.mutedForeground} />  Back

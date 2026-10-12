@@ -163,7 +163,7 @@ export default function SignInScreen() {
       {/* Top Bar with Back Arrow and Centered Title */}
       <View style={styles.navBar}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
           accessibilityRole="button"
           accessibilityLabel="Go back"
           style={[styles.backBtn, { backgroundColor: colors.card, borderColor: colors.border }]}

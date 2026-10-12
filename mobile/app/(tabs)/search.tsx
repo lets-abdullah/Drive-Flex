@@ -219,11 +219,7 @@ export default function SearchScreen() {
           accessibilityRole="button"
           accessibilityLabel="Go back"
           onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace('/(tabs)');
-            }
+            router.navigate('/(tabs)');
           }}
           style={[
             styles.headerSquareBtn,

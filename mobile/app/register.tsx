@@ -178,7 +178,11 @@ export default function RegisterScreen() {
             if (step === 'form') {
               setStep('choose-role');
             } else {
-              router.back();
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)');
+              }
             }
           }}
           accessibilityRole="button"

@@ -41,6 +41,7 @@ export default function VehicleDetailsScreen() {
 
   const [activeTab, setActiveTab] = useState<DetailTab>('overview');
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [imageError, setImageError] = useState(false);
 
   const [pickup] = useState(dateAfter(3));
   const [returnDate] = useState(dateAfter(6));
@@ -90,7 +91,7 @@ export default function VehicleDetailsScreen() {
   if (!vehicle) {
     return (
       <Page>
-        <Pressable onPress={() => router.back()} style={{ marginBottom: 24 }} accessibilityRole="button">
+        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} style={{ marginBottom: 24 }} accessibilityRole="button">
           <Feather name="arrow-left" size={22} color={colors.foreground} />
         </Pressable>
         <Text style={{ color: colors.foreground, fontSize: 24, fontWeight: '700' }}>This car isn’t available</Text>
@@ -115,7 +116,7 @@ export default function VehicleDetailsScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Go back"
-            onPress={() => router.back()}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
             style={[styles.circleBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           >
             <Feather name="arrow-left" size={19} color={colors.foreground} />
@@ -135,7 +136,17 @@ export default function VehicleDetailsScreen() {
 
         {/* ─── 2. HERO IMAGE SHOWCASE (Screen 4) ─── */}
         <View style={[styles.heroImageFrame, { backgroundColor: colors.isDark ? '#111111' : '#F6F7F9', borderColor: colors.border }]}>
-          <Image source={{ uri: currentImage }} contentFit="cover" style={styles.heroImage} transition={200} />
+          <Image
+            source={{
+              uri: imageError
+                ? 'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1200&q=80'
+                : (currentImage || 'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1200&q=80'),
+            }}
+            onError={() => setImageError(true)}
+            contentFit="cover"
+            style={styles.heroImage}
+            transition={200}
+          />
 
           <View style={[styles.verifiedTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Feather name="shield" size={12} color={colors.star} />

@@ -237,7 +237,7 @@ export default function AddVehicleScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back to Listings"
-          onPress={() => router.back()}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/host/listings'))}
           style={[styles.backBtn, { borderColor: colors.border }]}
         >
           <Feather name="arrow-left" size={20} color={colors.foreground} />

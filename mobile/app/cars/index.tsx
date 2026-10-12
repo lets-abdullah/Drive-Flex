@@ -49,7 +49,7 @@ export default function ViewAllCarsScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Go back"
-          onPress={() => router.back()}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
           style={[styles.circleBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
         >
           <Feather name="arrow-left" size={19} color={colors.foreground} />

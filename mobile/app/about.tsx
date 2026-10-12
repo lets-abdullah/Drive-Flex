@@ -9,7 +9,7 @@ export default function AboutScreen() {
   const colors = useColors();
   return (
     <Page>
-      <Pressable onPress={() => router.back()} hitSlop={10} style={{ marginBottom: 18 }}>
+      <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} hitSlop={10} style={{ marginBottom: 18 }}>
         <Feather name="arrow-left" size={21} color={colors.foreground} />
       </Pressable>
       <BrandMark />

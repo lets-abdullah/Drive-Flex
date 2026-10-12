@@ -144,7 +144,7 @@ export default function HostListingsScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back to Profile"
-          onPress={() => router.back()}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/profile'))}
           style={[styles.backBtn, { borderColor: colors.border }]}
         >
           <Feather name="arrow-left" size={20} color={colors.foreground} />

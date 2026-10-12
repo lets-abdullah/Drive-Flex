@@ -46,7 +46,7 @@ export default function PublicHostProfileScreen() {
   if (!host) {
     return (
       <Page>
-        <Pressable onPress={() => router.back()} style={{ marginBottom: 20 }}>
+        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} style={{ marginBottom: 20 }}>
           <Feather name="arrow-left" size={22} color={colors.foreground} />
         </Pressable>
         <EmptyState
@@ -70,7 +70,7 @@ export default function PublicHostProfileScreen() {
   return (
     <Page>
       {/* ─── BACK BUTTON ─── */}
-      <Pressable onPress={() => router.back()} hitSlop={10} style={{ marginBottom: 14 }}>
+      <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} hitSlop={10} style={{ marginBottom: 14 }}>
         <Feather name="arrow-left" size={22} color={colors.foreground} />
       </Pressable>
 
