@@ -152,6 +152,55 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleQuickDemoSignIn = async (demoRole: 'renter' | 'host') => {
+    setLoading(true);
+    setSelectedRole(demoRole);
+    const demoEmail = demoRole === 'renter' ? 'renter@driveflex.pk' : 'host@driveflex.pk';
+    const demoPassword = 'password123';
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+
+    try {
+      const baseUrl = getApiBaseUrl();
+      const res = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: demoEmail,
+          password: demoPassword,
+          expectedRole: demoRole,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && data.user) {
+        await setSession({
+          id: data.user.id,
+          name: data.user.name,
+          email: data.user.email,
+          role: data.user.role,
+          phone: data.user.phone,
+          city: data.user.city,
+          businessName: data.user.businessName,
+        });
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // offline fallback
+    }
+
+    await setSession({
+      id: demoRole === 'host' ? 'owner-ali' : 'usr-demo-renter',
+      name: demoRole === 'host' ? 'Ali Raza' : 'Omar Farooq',
+      email: demoEmail,
+      role: demoRole,
+      phone: demoRole === 'host' ? '+92 321 440 7812' : '+92 300 8472910',
+      city: 'Lahore',
+      businessName: demoRole === 'host' ? 'Ali Motors Lahore' : undefined,
+    });
+    setLoading(false);
+  };
 
   // Create Account Handler
   const handleCreateAccount = async () => {
@@ -340,6 +389,83 @@ export default function ProfileScreen() {
                     : 'Sign in to find and book the perfect car for your next trip.'
                 }
               />
+
+              {/* Quick Demo Credentials Box */}
+              <View
+                style={[
+                  styles.demoCredentialsBox,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+              >
+                <View style={styles.demoBoxHeader}>
+                  <Feather name="zap" size={14} color="#D97706" />
+                  <Text style={[styles.demoBoxTitle, { color: colors.foreground }]}>
+                    Demo Credentials (1-Tap Login)
+                  </Text>
+                </View>
+
+                <View style={styles.demoCardsRow}>
+                  {/* Demo Renter Card */}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="1-Tap Login as Demo Renter"
+                    onPress={() => void handleQuickDemoSignIn('renter')}
+                    style={[
+                      styles.demoCard,
+                      {
+                        backgroundColor: selectedRole === 'renter' ? (colors.isDark ? '#261619' : '#FEF2F2') : (colors.isDark ? '#141822' : '#F8FAFC'),
+                        borderColor: selectedRole === 'renter' ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.demoCardTop}>
+                      <View style={[styles.demoBadge, { backgroundColor: 'rgba(177, 18, 38, 0.12)' }]}>
+                        <Text style={[styles.demoBadgeText, { color: colors.primary }]}>RENTER</Text>
+                      </View>
+                      <Text style={[styles.demoActionText, { color: colors.primary }]}>⚡ Login</Text>
+                    </View>
+                    <Text style={[styles.demoNameText, { color: colors.foreground }]} numberOfLines={1}>
+                      Omar Farooq
+                    </Text>
+                    <Text style={[styles.demoEmailText, { color: colors.mutedForeground }]} numberOfLines={1}>
+                      renter@driveflex.pk
+                    </Text>
+                    <Text style={[styles.demoPassText, { color: colors.mutedForeground }]}>
+                      🔑 password123
+                    </Text>
+                  </Pressable>
+
+                  {/* Demo Host Card */}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="1-Tap Login as Demo Host"
+                    onPress={() => void handleQuickDemoSignIn('host')}
+                    style={[
+                      styles.demoCard,
+                      {
+                        backgroundColor: selectedRole === 'host' ? (colors.isDark ? '#262013' : '#FEFCE8') : (colors.isDark ? '#141822' : '#F8FAFC'),
+                        borderColor: selectedRole === 'host' ? '#C9A227' : colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.demoCardTop}>
+                      <View style={[styles.demoBadge, { backgroundColor: 'rgba(201, 162, 39, 0.16)' }]}>
+                        <Text style={[styles.demoBadgeText, { color: '#C9A227' }]}>HOST</Text>
+                      </View>
+                      <Text style={[styles.demoActionText, { color: '#C9A227' }]}>⚡ Login</Text>
+                    </View>
+                    <Text style={[styles.demoNameText, { color: colors.foreground }]} numberOfLines={1}>
+                      Ali Raza
+                    </Text>
+                    <Text style={[styles.demoEmailText, { color: colors.mutedForeground }]} numberOfLines={1}>
+                      host@driveflex.pk
+                    </Text>
+                    <Text style={[styles.demoPassText, { color: colors.mutedForeground }]}>
+                      🔑 password123
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
 
               <View style={styles.inputsStack}>
                 <AuthInputField
@@ -1207,5 +1333,64 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-
+  demoCredentialsBox: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 14,
+    gap: 10,
+  },
+  demoBoxHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  demoBoxTitle: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  demoCardsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  demoCard: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 10,
+    gap: 4,
+  },
+  demoCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  demoBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  demoBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  demoActionText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  demoNameText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  demoEmailText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  demoPassText: {
+    fontSize: 10.5,
+    marginTop: 1,
+  },
 });
