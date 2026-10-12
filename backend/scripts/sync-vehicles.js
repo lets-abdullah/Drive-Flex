@@ -1,6 +1,12 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const mongoose = require('mongoose');
 
-const uri = 'mongodb+srv://letsmailabdullahcoder_db_user:0PCZIPJvQ9AK1v9X@cluster0.dceioeq.mongodb.net/Driveflex?appName=Cluster0';
+const uri = process.env.MONGO_URI;
+if (!uri) {
+  console.error('❌  MONGO_URI is not set. Please set it in backend/.env or your environment variables.');
+  process.exit(1);
+}
 
 const pakistaniVehicles = [
   {
